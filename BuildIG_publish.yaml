@@ -1,0 +1,201 @@
+name: Build IG and publish
+
+on:
+  workflow_dispatch:
+    inputs:
+      orgrepo:
+        description: 'Github repository of the IG e.g. hl7ch/ch-ig'
+        required: true
+        default: 'hl7ch/ch-'
+        type: string
+      igname:
+        description: 'Name of the IG. (directory on fhir.ch) e.g. ch-ig'
+        required: true
+        default: 'ch-ig'
+        type: string
+      branch:
+        description: 'branch name'
+        required: true
+        default: 'master'
+        type: string
+      version:
+        description: 'Version of the IG'
+        required: true
+        default: '1.0.0'
+        type: string
+      publish:
+        description: 'Publish to github if build is successful'
+        required: true
+        default: true
+        type: boolean
+
+# The following jobs are equal for all IGs and can be moved to a common composite-action if 'uses'-support is added, see:
+# https://github.com/actions/runner/blob/main/docs/adrs/1144-composite-actions.md
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: 'write'
+    env:
+      orgrepo: "${{ github.event.inputs.orgrepo }}"
+      igname: "${{ github.event.inputs.igname }}"
+      version: "${{ github.event.inputs.version }}"
+      publish: "${{ github.event.inputs.publish }}"
+      branch: "${{ github.event.inputs.branch }}"
+      fhirchappid: 974513
+    steps:
+      - name: 📦 Build and test with Rake        
+        run: |
+          sudo apt-get update
+          sudo apt-get install ruby-full graphviz
+          sudo gem install jekyll jekyll-asciidoc
+
+      - name: 📦 Install modules
+        run: npm install -g fsh-sushi
+
+      - name: ☕ Setup Java 21
+        uses: actions/setup-java@v3
+        with:
+          java-version: 21
+          distribution: adopt
+
+      - name: 📝 Get the repo name
+        id: repo_name
+        run: echo "::set-output name=repo::$(echo ${{ env.orgrepo }} | cut -d '/' -f 2)"
+        shell: bash
+
+      - name: 📝 Get the ig name
+        id: ig_name
+        run: echo "::set-output name=ig::$(echo ${{ env.igname }} | cut -d '/' -f 2)"
+        shell: bash
+
+      - name: 📝 Get the branch name
+        id: branch
+        run: echo "::set-output name=branch::$(echo ${{ env.branch }} | cut -d '/' -f 2)"
+        shell: bash
+
+      - name: 📝 Get the organization name
+        id: org_name
+        run: echo "::set-output name=org::$(echo ${{ env.orgrepo }} | cut -d '/' -f 1)"
+        shell: bash
+
+      - name: 📝 Change to workspace
+        run: echo "Changing to workspace "
+        working-directory: ${{ github.workspace }}          
+
+      - name: 📝 Workspace
+        run: echo "${{ github.workspace }}"
+        shell: bash
+
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            .github
+            assets
+            templates
+            ig-history
+            ig-registry
+            ig/${{ steps.ig_name.outputs.ig }}    
+      - name: 📥 Download IG Publisher
+        run: |
+              wget -q https://github.com/HL7/fhir-ig-publisher/releases/latest/download/publisher.jar
+              ls -all ./publisher.jar
+
+      - name: 📝 List path
+        run: ls -R ./
+
+      - name: app a token for the Github APP that we can read from the owner repo, app needs permission to org and repo, see https://github.com/organizations/hl7ch/settings/apps/fhir-ig-publication-on-fhir-ch/permissions
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ env.fhirchappid }}
+          private-key: ${{ secrets.HL7CHAPPFHIRCH }}
+          owner: ${{ steps.org_name.outputs.org }}
+          repositories: "${{ steps.repo_name.outputs.repo }}"
+      
+      - name: Get GitHub App User ID
+        id: get-user-id
+        run: echo "user-id=$(gh api "/users/${{ steps.app-token.outputs.app-slug }}[bot]" --jq .id)" >> "$GITHUB_OUTPUT"
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+      - run: |
+          git config --global user.name '${{ steps.app-token.outputs.app-slug }}[bot]'
+          git config --global user.email '${{ steps.get-user-id.outputs.user-id }}+${{ steps.app-token.outputs.app-slug }}[bot]@users.noreply.github.com>'
+
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ env.orgrepo }}
+          path: ${{ steps.repo_name.outputs.repo }}
+          token: ${{ steps.app-token.outputs.token }}
+          ref: ${{ steps.branch.outputs.branch }}
+
+      # Builds the HTML page for the IG.
+      - name: 🏃‍♂️ Run IG Publisher local
+        timeout-minutes: 90 # We need a long timeout here
+        run: |
+              cd ${{ steps.repo_name.outputs.repo }}
+              java -Xmx8192m -jar ../publisher.jar  -ig .
+              cd ..
+
+      - name: 🏃‍♂️ Run Publication
+        timeout-minutes: 270 # We need a long timeout here
+        run: |
+              java -jar -Dfile.encoding=UTF-8 -Xms3550m -Xmx8192m ./publisher.jar -go-publish -source ${{ steps.repo_name.outputs.repo }} -web $PWD -registry ig-registry/fhir-ig-list.json -history ig-history -templates ./templates -temp $PWD/buildtmp
+
+      - name: get a second token for the Github APP that we can commit to the owner repo
+        id: app-token2
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ env.fhirchappid }}
+          private-key: ${{ secrets.HL7CHAPPFHIRCH }}
+          owner: ${{ steps.org_name.outputs.org }}
+          repositories: "${{ steps.repo_name.outputs.repo }}"
+      
+      - name: tag the ig repository with the published version
+        if: ${{ env.publish == 'true' }}
+        id: tag_release
+        continue-on-error: true
+        run: |
+          cd ${{ steps.repo_name.outputs.repo }}
+          git remote set-url origin https://x-access-token:${{ steps.app-token2.outputs.token }}@github.com/${{ steps.org_name.outputs.org }}/${{ steps.repo_name.outputs.repo }}.git
+          git tag -fa ${{ env.version }} -m "Release ${{ env.version }}"
+          git push origin ${{ env.version }} --force
+          echo "sha=$(git rev-parse --verify "$GITHUB_SHA")" >> "$GITHUB_OUTPUT"
+          cd ..
+    
+      - name: 🐙 Clean download git repo
+        run: rm -rf ${{ steps.repo_name.outputs.repo }}
+        shell: bash
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ env.publish == 'false' }}
+        with:
+          name: my-artifact
+          path: ./ig/${{ steps.repo_name.outputs.repo }} 
+          retention-days: 2
+          
+      - name: 🐙 Commit and push changes to hl7ch.github.io
+        if: ${{ env.publish == 'true' }}
+        run: |
+          git config pull.ff only
+          git pull
+          git add --sparse .
+          git commit -m "${{ steps.ig_name.outputs.ig }} - ${{ env.version }}"
+          git push
+      - name: Send a stream message to Zulip
+        if: ${{ env.publish == 'true' }}
+        uses: zulip/github-actions-zulip/send-message@v1
+        with:
+          api-key: ${{ secrets.ZULIPAPIKEY }}
+          email: "hl7ch-bot@chat.fhir.org"
+          organization-url: "https://chat.fhir.org"
+          to: "switzerland"
+          type: "stream"
+          topic: "fhir.ch: new FHIR Implementation Guide published"
+          content: |
+             :rocket: ${{ steps.ig_name.outputs.ig }}/${{ env.version }} published :rocket:
+             
+             Details: [published](https://fhir.ch/ig/${{ steps.ig_name.outputs.ig }}/${{ env.version }}/index.html) | [qa](https://fhir.ch/ig/${{ steps.ig_name.outputs.ig }}/${{ env.version }}/qa.html)
+             
+             :memo: It might take a few minutes until [fhir.ch](https://fhir.ch/) is serving the new version, should be visible on packages servers in [max 1](https://packages2.fhir.org/packages/catalog) to [max 8](https://registry.fhir.org/) hours.

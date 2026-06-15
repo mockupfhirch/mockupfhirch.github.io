@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>fhir.ch — Swiss FHIR Implementation Guide Registry</title>
+  <meta name="description" content="Registry of FHIR Implementation Guides for Switzerland, maintained by HL7 Switzerland.">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="./css/site.css">
+
+  <script src="./js/load-data.js" defer></script>
+  <script src="./js/app.js" defer></script>
+</head>
+<body>
+
+  <!-- ─── Top utility bar ───────────────────────────────────────── -->
+  <div class="utility-bar">
+    <div class="container">
+      <div class="links">
+        <a href="https://www.hl7.ch/">hl7.ch ↗</a>
+        <a href="https://www.hl7.org/">hl7.org ↗</a>
+        <a href="https://www.hl7.org/fhir/">hl7.org/fhir ↗</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── Main header ───────────────────────────────────────────── -->
+  <header class="main-header">
+    <div class="container">
+      <!-- fhir.ch wordmark (plain text — no flag, no subtitle) -->
+      <span class="brand-text">fhir<span class="dot">.</span>ch</span>
+
+      <!-- HL7 Affiliate Switzerland logo (image asset) -->
+      <span class="affiliate-logo">
+        <img src="./assets/hl7-affiliate.png" alt="HL7® Affiliate | Switzerland">
+      </span>
+
+      <!-- HL7 FHIR logo (image asset) -->
+      <span class="fhir-logo">
+        <img src="./assets/hl7-fhir.png" alt="HL7® FHIR®">
+      </span>
+
+      <!-- Nav -->
+      <nav class="main-nav">
+        <a href="#publications" class="active">Implementation Guides</a>
+        <a href="https://www.hl7.ch/de/news">News</a>
+        <a href="https://www.hl7.ch/de/veranstaltungen">Events</a>
+        <a href="https://github.com/hl7ch">
+          <span class="gh-dot"></span> GitHub
+        </a>
+      </nav>
+    </div>
+  </header>
+
+  <!-- ─── Hero ──────────────────────────────────────────────────── -->
+  <section class="hero">
+    <div class="container">
+      <div>
+        <div class="hero-eyebrow">— Publication Registry · v2026.06</div>
+        <h1 class="hero-title">Swiss FHIR Implementation Guides.</h1>
+        <p class="hero-intro">
+          <strong>FHIR<sup>®</sup></strong> — Fast Healthcare Interoperability Resources — is a next-generation standards framework created by <a href="https://www.hl7.org/">HL7<sup>®</sup></a>. This registry of FHIR Implementation Guides for Switzerland is maintained by <a href="https://www.hl7.ch/">HL7 Switzerland</a>.
+        </p>
+        <div class="hero-cta">
+          <a class="btn primary" href="https://github.com/hl7ch/ch-core/wiki">Join FHIR.ch work group calls →</a>
+          <a class="btn outline" href="https://github.com/hl7ch/ch-core/wiki/Guidelines-for-Swiss-IG-Development">Guidelines for Swiss IG development</a>
+          <a class="btn ghost"   href="mailto:tc@hl7.ch">tc@hl7.ch ↗</a>
+        </div>
+      </div>
+
+      <!-- Stats -->
+      <div class="stats">
+        <div class="card published">
+          <div class="label">Published</div>
+          <div class="number" id="hero-published">0</div>
+          <div class="footnote">active guides</div>
+        </div>
+        <div class="card ballot">
+          <div class="label">● Under Ballot</div>
+          <div class="number" id="hero-ballot">0</div>
+          <div class="footnote">
+            <span id="hero-stu">0</span> STU · <span id="hero-dstu">0</span> DSTU
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── Sticky tab bar ────────────────────────────────────────── -->
+  <section id="publications" class="tab-bar">
+    <div class="container">
+      <div class="tabs">
+        <button id="tab-published" class="tab active" data-action="view-published">
+          <span class="idx">01</span>
+          <span class="label">Published</span>
+          <span class="count" id="tab-published-count">(0)</span>
+        </button>
+        <button id="tab-ballot" class="tab" data-action="view-ballot">
+          <span class="idx">02</span>
+          <span class="label">Under Ballot</span>
+          <span class="count" id="tab-ballot-count">(0)</span>
+        </button>
+      </div>
+
+      <div class="tab-bar-right">
+        <div class="fhir-pills">
+          <button id="fhir-all" class="fhir-pill active" data-action="fhir-all">ALL</button>
+          <button id="fhir-r4"  class="fhir-pill"        data-action="fhir-r4">R4</button>
+          <button id="fhir-r5"  class="fhir-pill"        data-action="fhir-r5">R5</button>
+        </div>
+        <form class="search-form" onsubmit="event.preventDefault()">
+          <input id="search-input" class="search-input" type="search" placeholder="Search by IG name, id, description…">
+        </form>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── Ballot sub-tabs (hidden until Ballot view) ────────────── -->
+  <section id="subtabs" class="subtabs" style="display: none;">
+    <div class="container">
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <span class="label">Ballot type</span>
+        <button id="subtab-all"  class="subtab active" data-action="kind-all">
+          <span class="label-text">All Ballot</span>
+          <span class="count" id="subtab-all-count">(0)</span>
+        </button>
+        <button id="subtab-stu"  class="subtab"        data-action="kind-stu">
+          <span class="label-text">STU Ballot</span>
+          <span class="count" id="subtab-stu-count">(0)</span>
+        </button>
+        <button id="subtab-dstu" class="subtab"        data-action="kind-dstu">
+          <span class="label-text">DSTU Ballot</span>
+          <span class="count" id="subtab-dstu-count">(0)</span>
+        </button>
+      </div>
+      <div class="review-note">
+        <span class="dot">●</span> Open for review · Comments via <a href="https://github.com/hl7ch">GitHub</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── Registry list (rendered by app.js) ────────────────────── -->
+  <section class="registry">
+    <div class="container">
+      <div id="registry-root"></div>
+    </div>
+  </section>
+
+  <!-- ─── Footer ────────────────────────────────────────────────── -->
+  <footer class="site-footer">
+    <div class="container">
+      <div class="footer-row">
+        <div class="left">
+          <span>© 2026 HL7 Benutzergruppe Schweiz</span>
+          <a href="mailto:tc@hl7.ch">tc@hl7.ch</a>
+          <a href="https://www.hl7.ch/de/datenschutzerklärung">Datenschutzerklärung</a>
+        </div>
+        <div class="right">
+          <span class="legal">FHIR® and the Flame design mark are registered trademarks of HL7®.</span>
+          <span class="sep">|</span>
+          <a href="https://github.com/hl7ch">GitHub</a>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+</body>
+</html>
