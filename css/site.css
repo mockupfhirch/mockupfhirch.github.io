@@ -15,6 +15,21 @@ button { font-family: inherit; }
   padding: 0 40px;
 }
 
+/* ─── Mock-up notice band (FHIR IG style) ──────────────────────── */
+.mockup-banner {
+  background: #ffff99;
+  border-bottom: 1px solid #000;
+  color: #000;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.mockup-banner .container {
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+.mockup-banner a { color: #0050B2; text-decoration: underline; }
+.mockup-banner strong { font-weight: 700; }
+
 /* ─── Utility bar (top dark navy strip) ────────────────────────── */
 .utility-bar {
   background: #0c2a4d;
