@@ -91,7 +91,7 @@
   var EXTRA_IGS = [{
     id: 'https://fhir.ch/igs/ch-umzh-connect',
     identifier: 'ch.fhir.ig.ch-umzh-connect',
-    name: 'CH UMZH Connect IG (R4)',
+    name: 'CH UMZH Connect',
     description: 'FHIR Implementation Guide for the University Medicine Zurich (UMZH) focusing on referral processes.',
     version: '1.0.0-ballot',
     fhirVersion: ['4.0.1'],
@@ -171,10 +171,12 @@
     links.wiki = overLinks.wiki || ('https://github.com/hl7ch/' + slug + '/wiki');
     if (overLinks.jira) links.jira = overLinks.jira;
 
+    var rawName = pkg.title || slug;
     var ig = {
       id: 'https://fhir.ch/igs/' + slug,
       identifier: pkgId,
-      name: pkg.title || slug,
+      // Strip trailing "(R4)" / "(R5)" — FHIR version already shows on the card.
+      name: rawName.replace(/\s*\(R\d+\)\s*$/i, ''),
       description: (description || '').trim(),
       version: version,
       fhirVersion: fhirVersion,

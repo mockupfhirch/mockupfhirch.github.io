@@ -394,7 +394,7 @@ button { font-family: inherit; }
   align-items: baseline;
   gap: 18px;
 }
-.org-header .idx {
+.org-header .by {
   font-family: 'IBM Plex Mono', monospace;
   font-size: 12px;
   letter-spacing: 0.14em;
@@ -422,18 +422,12 @@ button { font-family: inherit; }
 /* IG cards */
 .ig-card {
   display: grid;
-  grid-template-columns: 44px 1.4fr 1fr;
+  grid-template-columns: 1.4fr 1fr;
   gap: 28px;
   padding: 22px 0;
   border-bottom: 1px solid #e2e8f0;
 }
 .ig-card:hover { background: #fbfcfd; }
-.ig-card .row-num {
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 12px;
-  color: #94a3b8;
-  padding-top: 4px;
-}
 .ig-card .title-row {
   display: flex;
   align-items: baseline;

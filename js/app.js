@@ -136,7 +136,7 @@
       + `<span class="icon">${chip.icon}</span><span>${escapeHtml(chip.label)}</span></a>`;
   }
 
-  function renderIgCard(ig, row) {
+  function renderIgCard(ig) {
     const isBallot = ig.publicationStatus === 'under-ballot';
     const badge = badgeFor(ig);
     const chips = chipsFor(ig).map(renderChip).join('');
@@ -145,7 +145,6 @@
     const dateValue = isBallot ? fmtDate(ig.ballotCloses) : fmtDate(ig.date);
 
     return `<div class="ig-card">
-      <div class="row-num">${String(row + 1).padStart(2, '0')}</div>
       <div>
         <div class="title-row">
           <span class="title">${escapeHtml(ig.name)}</span>
@@ -168,11 +167,11 @@
   }
 
   function renderGroup(group) {
-    const cards = group.items.map((ig, i) => renderIgCard(ig, i)).join('');
+    const cards = group.items.map(renderIgCard).join('');
     return `<div class="org-group">
       <div class="org-header">
         <div class="left">
-          <div class="idx">${group.indexLabel} · By</div>
+          <span class="by">By</span>
           <h2>${escapeHtml(group.name)}</h2>
           <span class="id">/${escapeHtml(group.id)}</span>
         </div>
@@ -217,9 +216,7 @@
     el('hero-stu').textContent       = v.stu.length;
     el('hero-dstu').textContent      = v.dstu.length;
 
-    // Tab labels
-    el('tab-published-count').textContent = `(${v.published.length})`;
-    el('tab-ballot-count').textContent    = `(${v.ballot.length})`;
+    // Sub-tab labels (Published/Ballot tab counts are intentionally not shown)
     el('subtab-all-count').textContent    = `(${v.ballot.length})`;
     el('subtab-stu-count').textContent    = `(${v.stu.length})`;
     el('subtab-dstu-count').textContent   = `(${v.dstu.length})`;
