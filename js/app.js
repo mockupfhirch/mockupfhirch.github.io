@@ -21,10 +21,6 @@
   }
 
   // ─── Helpers ────────────────────────────────────────────────────
-  const ORG_ORDER = [
-    'hl7ch', 'ehealth-suisse', 'foph', 'ech-hl7ch',
-    'refdata', 'cara', 'sphn', 'swissnoso', 'openmedical', 'umzh'
-  ];
   // IGs pinned to the top of their org group (in this order).
   const PINNED_IDS = ['ch.fhir.ig.ch-term', 'ch.fhir.ig.ch-core'];
   function pinIndex(ig) {
@@ -80,7 +76,8 @@
         igUrl:             (ig.links && ig.links.ig) || ig.url
       });
     }
-    const subOrder = { published: 0, 'under-ballot': 1, superseded: 2 };
+    // Latest sits on top: ballot row first, then released, then superseded.
+    const subOrder = { 'under-ballot': 0, published: 1, superseded: 2 };
     for (const agg of byId.values()) {
       agg.versions.sort((a, b) =>
         (subOrder[a.publicationStatus] ?? 9) - (subOrder[b.publicationStatus] ?? 9));
@@ -166,14 +163,14 @@
     }
 
     const groups = [...byOrg.values()]
-      .sort((a, b) => {
-        const ai = ORG_ORDER.indexOf(a.id);
-        const bi = ORG_ORDER.indexOf(b.id);
-        if (ai !== -1 && bi !== -1) return ai - bi;
-        if (ai !== -1) return -1;
-        if (bi !== -1) return 1;
-        return a.name.localeCompare(b.name);
+      .map(g => {
+        // Each org's rank is the date of its newest IG (across all
+        // aggregates / all versions). Most recent publisher leads.
+        g.maxDate = g.items.reduce(
+          (m, agg) => (agg.maxDate > m ? agg.maxDate : m), '');
+        return g;
       })
+      .sort((a, b) => (b.maxDate || '').localeCompare(a.maxDate || ''))
       .map(g => {
         g.items.sort((a, b) => {
           const ta = tier(a), tb = tier(b);

@@ -376,6 +376,31 @@
       if (pub && bal) break;
     }
 
+    // Upstream curation sometimes lags: package-registry.json advertises a
+    // -ballot version that the per-IG package-list.json hasn't been updated
+    // to include yet (CH EMS 2.0.0-ballot dated 2026-06-15 is the canonical
+    // example — its plist still only lists the 2020 trial-use release).
+    // Surface the registry-level ballot when the plist is missing it.
+    if (!bal && /-ballot$/.test(latest.version)) {
+      bal = {
+        version:     latest.version,
+        path:        latest.path || '',
+        date:        latest.date || '',
+        // Most ballots stay on the same FHIR release as the prior pub.
+        fhirversion: (pub && pub.fhirversion) || '',
+        status:      'ballot',
+        sequence:    ''
+      };
+    }
+
+    // Drop the ballot if it's already been superseded by a released
+    // version — upstream often leaves stale "status: ballot" entries
+    // after the next trial-use ships (e.g. CH LAB-Report's 2.0.0-ballot
+    // from May 2025 with 2.0.0 trial-use released in Dec 2025).
+    if (bal && pub && bal.date && pub.date && bal.date <= pub.date) {
+      bal = null;
+    }
+
     if (!pub && !bal) {
       // No usable plist — fall back to pkg.latest.
       return [buildOne(pkg, plist, latestAsEntry, derivePublicationStatus(latest.version, {}))];
