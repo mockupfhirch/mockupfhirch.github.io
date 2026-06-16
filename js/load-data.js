@@ -14,33 +14,131 @@
   var GH_BASE = 'https://raw.githubusercontent.com/benjamin-arfa/hl7ch.github.io/main';
   var REGISTRY_URL = GH_BASE + '/package-registry.json';
 
+  // ──────────────────────────── Blacklist ────────────────────────────
+  // Hand-curated set of package-ids to drop from the registry — applied
+  // to both upstream packages and EXTRA_IGS. Add a one-line comment per
+  // entry explaining WHY it is excluded, so future curators have context.
+  var BLACKLIST = new Set([
+    'ch.fhir.ig.ch-ig'   // empty example/template IG, not for the public registry
+  ]);
+
+  // ─── HL7 CH workgroup shorthands ────────────────────────────────────
+  // Per-IG attribution restored from the legacy index.legacy.html cards.
+  var TC_URL = 'https://www.hl7.ch/technisches-komitee/';
+  var WG_FHIR   = { name: 'Arbeitsgruppe FHIR', url: 'https://www.hl7.ch/en/working-group-fhir' };
+  var WG_AF_EPD = { name: 'Joint Venture Arbeitsgruppe Austauschformate EPD', url: TC_URL };
+  var WG_RAD    = { name: 'Joint Venture Arbeitsgruppe Radiologie', url: TC_URL };
+  var WG_LAB    = { name: 'Joint Venture Laborprojekt', url: TC_URL };
+  var WG_EPD    = { name: 'Joint Venture Arbeitsgruppe EPD', url: TC_URL };
+
+  // ─── Superseded marker (CH ATC / PPQm / mHealth → CH EPR FHIR) ──────
+  var SUPERSEDED_BY_EPR_FHIR = {
+    id: 'ch.fhir.ig.ch-epr-fhir',
+    name: 'CH EPR FHIR',
+    url: 'http://fhir.ch/ig/ch-epr-fhir/'
+  };
+
   // ─────────────────────────── IG overrides ──────────────────────────
   // Hand-curated per-IG metadata that upstream doesn't provide:
-  //   organization (id, name)
-  //   ballotType   ("stu" | "informative")
-  //   ballotCloses (ISO date)
-  //   description  (overrides upstream introduction)
-  //   links        ({source, wiki, jira})
-  // Add an entry here when an IG needs to be re-attributed or its ballot
-  // date / extra links published.
-  // Per-IG overrides. Organization assignments taken from fhir.ch's own
-  // groupings (the authoritative source). IGs not listed here default to
-  // organization: 'hl7ch'.
+  //   organization     (id matching ORG_NAMES below)
+  //   workgroup        ({name, url}) — HL7 CH working group responsible
+  //   ballotType       ("stu" | "dstu")
+  //   ballotCloses     (ISO date)
+  //   description      (overrides upstream introduction — restored from
+  //                    legacy index.legacy.html, the community-validated text)
+  //   links            ({source, wiki, jira})
+  //   publicationStatus override ("published" | "superseded")
+  //   supersededBy     ({id, name, url}) — only set when publicationStatus
+  //                    is "superseded"
+  // IGs not listed here default to organization: 'hl7ch'.
   var OVERRIDES = {
+    // ─── HL7 Switzerland — Arbeitsgruppe FHIR ────────────────────────
+    'ch.fhir.ig.ch-core': {
+      description: 'Core FHIR profiles for Switzerland by HL7 Switzerland FHIR workgroup. See wiki for more information.',
+      workgroup: WG_FHIR
+    },
+    'ch.fhir.ig.ch-term': {
+      description: 'FHIR implementation guide containing terminology that is used in Switzerland for the core profiles, various exchange formats and also in the context of the Swiss electronic patient record (EPR).',
+      workgroup: WG_FHIR
+    },
+    'ch.fhir.ig.cda-fhir-maps': {
+      description: 'This Implementation Guide provides maps to transform documents from CDA to FHIR and back.',
+      workgroup: WG_FHIR
+    },
+
+    // ─── HL7 Switzerland — Joint Venture Austauschformate EPD ────────
+    'ch.fhir.ig.ch-emed': {
+      description: 'FHIR eMedication exchange formats for Annex 4.',
+      workgroup: WG_AF_EPD
+    },
+    'ch.fhir.ig.ch-vacd': {
+      description: 'Implementation Guide for the exchange of vaccination and immunization information in Switzerland.',
+      workgroup: WG_AF_EPD
+    },
+    'ch.fhir.ig.ch-allergyintolerance': {
+      description: 'Swiss Implementation Guide for Allergy & Intolerance based on the recommendations of the interprofessional working group EPR (IPAG).',
+      workgroup: WG_AF_EPD
+    },
+    'ch.fhir.ig.ch-orf': {
+      description: 'The Order & Referral by Form (CH ORF) Profile describes how forms for eReferrals, requests for information (such as diagnostic imaging results, lab results, discharge reports etc.) can be defined, deployed and used in order to achieve a syntactical and semantically consistent cross enterprise information exchange.',
+      workgroup: WG_AF_EPD
+    },
+    'ch.fhir.ig.ch-etoc': {
+      description: 'Transition of Care Implementation Guide based on the IPAG report.',
+      workgroup: WG_AF_EPD
+    },
+
+    // ─── HL7 Switzerland — Joint Venture Radiologie ──────────────────
+    'ch.fhir.ig.ch-rad-order': {
+      description: 'Based on the CH ORF Implementation Guide for Order & Referral in the Radiology domain to achieve a syntactical and semantically consistent cross enterprise information exchange.',
+      workgroup: WG_RAD
+    },
+
+    // ─── HL7 Switzerland — Joint Venture Laborprojekt ────────────────
+    'ch.fhir.ig.ch-lab-order': {
+      description: 'Swiss Implementation Guide for the exchange of order data in the laboratory sector.',
+      workgroup: WG_LAB
+    },
+    'ch.fhir.ig.ch-lab-report': {
+      description: 'Implementation Guide for Laboratory Reports in Switzerland.',
+      workgroup: WG_LAB
+    },
+
+    // ─── HL7 Switzerland — Joint Venture Arbeitsgruppe EPD ───────────
+    'ch.fhir.ig.ch-ips': {
+      description: 'Swiss IPS based on the International Patient Summary Implementation Guide.',
+      workgroup: WG_EPD
+    },
+    'ch.fhir.ig.ch-epreg': {
+      description: 'This Implementation Guide describes the FHIR representation of the electronic pregnancy passport in Switzerland.',
+      workgroup: WG_EPD
+    },
+
+    // ─── HL7 Switzerland — eCH / IVR ─────────────────────────────────
+    'ch.fhir.ig.ch-ems': {
+      description: 'Implementation Guide for the Emergency Medical Service protocol (eCH-0207) from IVR and HL7 Switzerland.',
+      workgroup: { name: 'IVR / HL7 Switzerland', url: 'mailto:felix.fischer@borsconsulting.ch' }
+    },
+
     // ─── FOPH ────────────────────────────────────────────────────────
     'ch.fhir.ig.ch-elm': {
       organization: 'foph',
-      description: 'CH ELM is a project of the Swiss Federal Office of Public Health (FOPH) for electronic laboratory reporting of notifiable diseases.'
+      description: 'CH ELM is a project of the Swiss Federal Office of Public Health (FOPH), Communicable Diseases Division, to enable laboratories to send their observations of notifiable communicable infectious diseases to the FOPH electronically.'
     },
     'ch.fhir.ig.ch-epl': {
-      organization: 'foph'
+      organization: 'foph',
+      description: 'The specialties list (SL) is the official list of reimbursable medicines in Switzerland, maintained by the Federal Office of Public Health (FOPH). This FHIR Implementation Guide defines the standardized representation and exchange of SL data using HL7® FHIR®, supporting interoperability in the Swiss healthcare system. It provides FHIR profiles for medicines, prices, packaging, and reimbursement conditions, enabling consistent integration across healthcare applications and services.'
     },
     'ch.fhir.ig.ch-crl': {
-      organization: 'foph'
+      organization: 'foph',
+      description: 'Implementation Guide that specifies the exchange format for cancer registration. In order to achieve data completeness on a national level, institutions involved in diagnosing or treating cancer are required to report cases of cancer to a cancer registry.'
     },
+
     // ─── eHealth Suisse ──────────────────────────────────────────────
     'ch.fhir.ig.ch-epr-fhir': {
       organization: 'ehealth-suisse',
+      description: 'This national extension provides a FHIR based API for the Swiss EPR by extending the IHE FHIR based mobile profiles.',
+      workgroup: { name: 'eHealth Suisse', url: 'mailto:martin.smock@e-health-suisse.ch' },
       // Upstream package-list.json marks 5.0.0 as status="ballot" but this is
       // the released national extension. Treat as published.
       publicationStatus: 'published'
@@ -48,14 +146,27 @@
     'ch.fhir.ig.ch-emr': {
       organization: 'ehealth-suisse'
     },
-    // ─── HL7 Switzerland (ch-ems is the eCH-0207 protocol, but published by HL7 CH) ─
-    'ch.fhir.ig.ch-ems': {
-      description: 'Implementation Guide for the Emergency Medical Service protocol (eCH-0207) from IVR and HL7 Switzerland.'
+
+    // ─── Superseded by CH EPR FHIR ───────────────────────────────────
+    'ch.fhir.ig.ch-atc': {
+      publicationStatus: 'superseded',
+      supersededBy: SUPERSEDED_BY_EPR_FHIR
     },
+    'ch.fhir.ig.ch-epr-ppqm': {
+      publicationStatus: 'superseded',
+      supersededBy: SUPERSEDED_BY_EPR_FHIR
+    },
+    'ch.fhir.ig.ch-epr-mhealth': {
+      publicationStatus: 'superseded',
+      supersededBy: SUPERSEDED_BY_EPR_FHIR
+    },
+
     // ─── CARA ────────────────────────────────────────────────────────
     'ch.fhir.ig.ch-emed-epr': {
-      organization: 'cara'
+      organization: 'cara',
+      description: 'FHIR eMedication exchange formats for the implementation effort of CARA within its EPR community.'
     },
+
     // ─── Refdata Foundation (for Swissmedic) ─────────────────────────
     'ch.fhir.ig.ch-idmp': {
       organization: 'refdata',
@@ -107,6 +218,37 @@
       history: 'http://fhir.ch/ig/ch-umzh-connect/history.html',
       source: 'https://github.com/umzhconnect/umzhconnect-ig',
       wiki: 'https://github.com/umzhconnect/umzhconnect-ig/wiki'
+    }
+  }, {
+    id: 'https://fhir.ch/igs/swissnoso',
+    identifier: 'ch.fhir.ig.swissnoso',
+    name: 'Swissnoso Implementation Guide',
+    description: 'Implementation guide to specify the exchange format for data transmission to Swissnoso in the context of monitoring and prevention of healthcare-associated infections.',
+    fhirVersion: ['4.0.1'],
+    publicationStatus: 'published',
+    organization: { id: 'swissnoso', name: 'Swissnoso' },
+    workgroup: { name: 'Swissnoso', url: 'mailto:contact@swissnoso.ch' },
+    url: 'http://fhir.ch/ig/swissnoso/',
+    codeRepository: 'https://github.com/ahdis/swissnoso',
+    links: {
+      ig: 'http://fhir.ch/ig/swissnoso/',
+      ciBuild: 'http://build.fhir.org/ig/ahdis/swissnoso/index.html',
+      history: 'http://fhir.ch/ig/swissnoso/history.html',
+      source: 'https://github.com/ahdis/swissnoso'
+    }
+  }, {
+    id: 'https://fhir.ch/igs/mednet-interface',
+    identifier: 'ch.fhir.ig.mednet-interface',
+    name: 'MedNet Interface IG',
+    description: 'This Implementation Guide describes the bundle that can be used to transfer patient information to MedNet, providing an optimized pre-filling of all forms.',
+    fhirVersion: ['4.0.1'],
+    publicationStatus: 'published',
+    organization: { id: 'openmedical', name: 'Open Medical' },
+    workgroup: { name: 'Open Medical', url: 'https://www.openmedical.swiss/#contact' },
+    url: 'https://doc.mednet.swiss/fhir/index.html',
+    links: {
+      ig: 'https://doc.mednet.swiss/fhir/index.html',
+      history: 'https://doc.mednet.swiss/fhir/history.html'
     }
   }];
 
@@ -187,6 +329,8 @@
       codeRepository: links.source,
       links: links
     };
+    if (over.workgroup) ig.workgroup = over.workgroup;
+    if (status === 'superseded' && over.supersededBy) ig.supersededBy = over.supersededBy;
     if (status === 'under-ballot') {
       ig.ballotType = over.ballotType || deriveBallotType(entry || {});
       if (over.ballotCloses) ig.ballotCloses = over.ballotCloses;
@@ -196,7 +340,9 @@
 
   function loadIgs() {
     return fetchJson(REGISTRY_URL).then(function (registry) {
-      var packages = registry.packages || [];
+      var packages = (registry.packages || []).filter(function (pkg) {
+        return !BLACKLIST.has(pkg['package-id']);
+      });
       // Fetch every per-IG package-list.json in parallel.
       var listPromises = packages.map(function (pkg) {
         var path = pkg.path || ('ig/' + pkg['package-id'].split('.').pop() + '/package-list.json');
@@ -211,7 +357,10 @@
           var entry = buildIgEntry(packages[i], plists[i]);
           if (entry) graph.push(entry);
         }
-        for (var j = 0; j < EXTRA_IGS.length; j++) graph.push(EXTRA_IGS[j]);
+        for (var j = 0; j < EXTRA_IGS.length; j++) {
+          if (BLACKLIST.has(EXTRA_IGS[j].identifier)) continue;
+          graph.push(EXTRA_IGS[j]);
+        }
         graph.sort(function (a, b) {
           var ai = ORG_ORDER.indexOf(a.organization.id);
           var bi = ORG_ORDER.indexOf(b.organization.id);

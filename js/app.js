@@ -9,7 +9,7 @@
 
   // ─── State ──────────────────────────────────────────────────────
   const state = {
-    view: 'published',     // 'published' | 'ballot'
+    view: 'all',           // 'all' | 'published' | 'ballot'
     ballotKind: 'all',     // 'all' | 'stu' | 'dstu'
     search: '',
     fhirFilter: ''         // '' | '4.0.1' | '5.0.0'
@@ -46,17 +46,25 @@
   // ─── Compute pipeline ───────────────────────────────────────────
   function compute() {
     const all = window.FHIR_CH_IGS || [];
-    const published = all.filter(g => g.publicationStatus === 'published');
-    const ballot    = all.filter(g => g.publicationStatus === 'under-ballot');
-    const stu       = ballot.filter(g => g.ballotType === 'stu');
-    const dstu      = ballot.filter(g => g.ballotType === 'dstu');
+    const published  = all.filter(g => g.publicationStatus === 'published');
+    const ballot     = all.filter(g => g.publicationStatus === 'under-ballot');
+    const superseded = all.filter(g => g.publicationStatus === 'superseded');
+    const stu        = ballot.filter(g => g.ballotType === 'stu');
+    const dstu       = ballot.filter(g => g.ballotType === 'dstu');
 
     const isBallotView = state.view === 'ballot';
-    let active = published;
-    if (isBallotView) {
+    const isAllView    = state.view === 'all';
+    // Superseded IGs render alongside Published (per Oliver's "all IGs on
+    // Published" overview ask) but are excluded from the hero counts.
+    let active;
+    if (isAllView) {
+      active = published.concat(ballot).concat(superseded);
+    } else if (isBallotView) {
       active = state.ballotKind === 'stu'  ? stu
              : state.ballotKind === 'dstu' ? dstu
              : ballot;
+    } else {
+      active = published.concat(superseded);
     }
 
     // Search filter
@@ -92,7 +100,13 @@
         return a.name.localeCompare(b.name);
       })
       .map((g, gi) => {
-        g.items.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+        g.items.sort((a, b) => {
+          // Superseded IGs sink to the bottom of their org group.
+          const aSup = a.publicationStatus === 'superseded' ? 1 : 0;
+          const bSup = b.publicationStatus === 'superseded' ? 1 : 0;
+          if (aSup !== bSup) return aSup - bSup;
+          return (b.date || '').localeCompare(a.date || '');
+        });
         return {
           ...g,
           indexLabel: String(gi + 1).padStart(2, '0'),
@@ -102,7 +116,7 @@
       });
 
     return {
-      all, published, ballot, stu, dstu,
+      all, published, ballot, stu, dstu, superseded,
       groups,
       isBallotView,
       isEmpty: groups.length === 0
@@ -111,6 +125,7 @@
 
   // ─── Chip + badge factories ─────────────────────────────────────
   function badgeFor(ig) {
+    if (ig.publicationStatus === 'superseded')  return { cls: 'badge superseded', text: 'SUPERSEDED' };
     const isBallot = ig.publicationStatus === 'under-ballot';
     if (!isBallot)                    return { cls: 'badge published', text: 'PUBLISHED' };
     if (ig.ballotType === 'stu')      return { cls: 'badge stu',       text: 'STU BALLOT' };
@@ -138,13 +153,26 @@
 
   function renderIgCard(ig) {
     const isBallot = ig.publicationStatus === 'under-ballot';
+    const isSuperseded = ig.publicationStatus === 'superseded';
     const badge = badgeFor(ig);
     const chips = chipsFor(ig).map(renderChip).join('');
     const fhirVersionStr = (ig.fhirVersion || []).join(', ') || '—';
     const dateLabel = isBallot ? 'BALLOT CLOSES' : 'PUBLISHED';
     const dateValue = isBallot ? fmtDate(ig.ballotCloses) : fmtDate(ig.date);
+    const versionStr = ig.version ? `v${escapeHtml(ig.version)}` : '—';
 
-    return `<div class="ig-card">
+    const supersededNote = isSuperseded && ig.supersededBy
+      ? `<div class="superseded-note">Superseded by <a href="${escapeHtml(ig.supersededBy.url)}" target="_blank" rel="noopener">${escapeHtml(ig.supersededBy.name)}</a>.</div>`
+      : '';
+
+    const workgroupMeta = ig.workgroup
+      ? `<span class="sep">·</span>
+         <span><span class="key">WORKGROUP</span>
+           <span class="val"><a href="${escapeHtml(ig.workgroup.url)}" target="_blank" rel="noopener">${escapeHtml(ig.workgroup.name)}</a></span>
+         </span>`
+      : '';
+
+    return `<div class="ig-card${isSuperseded ? ' is-superseded' : ''}">
       <div>
         <div class="title-row">
           <span class="title">${escapeHtml(ig.name)}</span>
@@ -152,12 +180,14 @@
           <span class="${badge.cls}">${badge.text}</span>
         </div>
         <div class="description">${escapeHtml(ig.description)}</div>
+        ${supersededNote}
         <div class="meta">
-          <span><span class="key">VERSION</span> <span class="val">v${escapeHtml(ig.version)}</span></span>
+          <span><span class="key">VERSION</span> <span class="val">${versionStr}</span></span>
           <span class="sep">·</span>
           <span><span class="key">FHIR</span> <span class="val">${escapeHtml(fhirVersionStr)}</span></span>
           <span class="sep">·</span>
           <span><span class="key">${dateLabel}</span> <span class="val">${dateValue}</span></span>
+          ${workgroupMeta}
         </div>
       </div>
       <div class="links-cluster">
@@ -189,7 +219,8 @@
   function el(id) { return document.getElementById(id); }
 
   function applyTabClasses(v) {
-    // Top tabs (Published / Under Ballot)
+    // Top tabs (All / Published / Under Ballot)
+    el('tab-all').classList.toggle('active', state.view === 'all');
     el('tab-published').classList.toggle('active', state.view === 'published');
     el('tab-ballot').classList.toggle('active', state.view === 'ballot');
 
@@ -240,6 +271,7 @@
       if (!btn) return;
       const a = btn.dataset.action;
       switch (a) {
+        case 'view-all':       setState({ view: 'all' });       break;
         case 'view-published': setState({ view: 'published' }); break;
         case 'view-ballot':    setState({ view: 'ballot' });    break;
         case 'kind-all':       setState({ ballotKind: 'all' }); break;

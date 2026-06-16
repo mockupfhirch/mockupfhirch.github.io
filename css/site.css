@@ -505,9 +505,23 @@ button { font-family: inherit; }
   letter-spacing: 0.1em;
   border: 1px solid transparent;
 }
-.badge.published { background: #eaf3ec; color: #1f6b3a; border-color: #bedcc6; }
-.badge.stu       { background: #d62828; color: #fff;    border-color: #d62828; }
-.badge.dstu      { background: #a51a1a; color: #fff;    border-color: #a51a1a; }
+.badge.published  { background: #eaf3ec; color: #1f6b3a; border-color: #bedcc6; }
+.badge.stu        { background: #d62828; color: #fff;    border-color: #d62828; }
+.badge.dstu       { background: #a51a1a; color: #fff;    border-color: #a51a1a; }
+.badge.superseded { background: #eee;    color: #777;    border-color: #d4d4d4; }
+
+/* Superseded IG: muted card + "Superseded by …" note */
+.ig-card.is-superseded .title,
+.ig-card.is-superseded .description { color: #64748b; }
+.ig-card.is-superseded .title { text-decoration: line-through; text-decoration-color: #94a3b8; }
+.superseded-note {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  color: #64748b;
+  margin: 0 0 10px;
+  letter-spacing: 0.04em;
+}
+.superseded-note a { color: #1f5aa6; }
 
 /* Link chips */
 .chip {
