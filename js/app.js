@@ -25,6 +25,12 @@
     'hl7ch', 'ehealth-suisse', 'foph', 'ech-hl7ch',
     'refdata', 'cara', 'sphn', 'swissnoso', 'openmedical', 'umzh'
   ];
+  // IGs pinned to the top of their org group (in this order).
+  const PINNED_IDS = ['ch.fhir.ig.ch-term', 'ch.fhir.ig.ch-core'];
+  function pinIndex(ig) {
+    const i = PINNED_IDS.indexOf(ig.identifier);
+    return i === -1 ? Infinity : i;
+  }
   const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
   function fmtDate(iso) {
@@ -43,9 +49,79 @@
       .replace(/'/g, '&#39;');
   }
 
+  // ─── Aggregation ────────────────────────────────────────────────
+  // Each upstream IG now produces up to two per-version entries
+  // (one published, one under-ballot). The renderer groups them back
+  // into a single card per identifier with sub-rows per version.
+  function aggregate(entries) {
+    const byId = new Map();
+    for (const ig of entries) {
+      let agg = byId.get(ig.identifier);
+      if (!agg) {
+        agg = {
+          identifier:   ig.identifier,
+          name:         ig.name,
+          description:  ig.description,
+          organization: ig.organization,
+          workgroup:    ig.workgroup,
+          supersededBy: ig.supersededBy,
+          links:        ig.links,     // shared per-repo links
+          versions:     []
+        };
+        byId.set(ig.identifier, agg);
+      }
+      agg.versions.push({
+        publicationStatus: ig.publicationStatus,
+        version:           ig.version,
+        date:              ig.date,
+        fhirVersion:       ig.fhirVersion,
+        ballotType:        ig.ballotType,
+        ballotCloses:      ig.ballotCloses,
+        igUrl:             (ig.links && ig.links.ig) || ig.url
+      });
+    }
+    const subOrder = { published: 0, 'under-ballot': 1, superseded: 2 };
+    for (const agg of byId.values()) {
+      agg.versions.sort((a, b) =>
+        (subOrder[a.publicationStatus] ?? 9) - (subOrder[b.publicationStatus] ?? 9));
+      agg.maxDate     = agg.versions.reduce((m, v) => (v.date > m ? v.date : m), '');
+      agg.isSuperseded = agg.versions.every(v => v.publicationStatus === 'superseded');
+      agg.hasBallot   = agg.versions.some(v => v.publicationStatus === 'under-ballot');
+    }
+    return [...byId.values()];
+  }
+
+  // Which version sub-rows should render under the active tab?
+  function visibleVersions(agg, view, ballotKind) {
+    if (view === 'all') return agg.versions;
+    if (view === 'published') {
+      return agg.versions.filter(v => v.publicationStatus !== 'under-ballot');
+    }
+    if (view === 'ballot') {
+      return agg.versions.filter(v =>
+        v.publicationStatus === 'under-ballot' &&
+        (ballotKind === 'all' || v.ballotType === ballotKind));
+    }
+    return [];
+  }
+
+  // Sort tier inside an org group.
+  //   0 = pinned (CH Term, CH Core)
+  //   1 = IGs with an active ballot
+  //   2 = the rest
+  //   3 = superseded (sunk to the bottom)
+  function tier(agg) {
+    if (agg.isSuperseded) return 3;
+    if (PINNED_IDS.includes(agg.identifier)) return 0;
+    if (agg.hasBallot) return 1;
+    return 2;
+  }
+
   // ─── Compute pipeline ───────────────────────────────────────────
   function compute() {
     const all = window.FHIR_CH_IGS || [];
+
+    // Hero stats are per-entry (per version).
     const published  = all.filter(g => g.publicationStatus === 'published');
     const ballot     = all.filter(g => g.publicationStatus === 'under-ballot');
     const superseded = all.filter(g => g.publicationStatus === 'superseded');
@@ -54,40 +130,39 @@
 
     const isBallotView = state.view === 'ballot';
     const isAllView    = state.view === 'all';
-    // Superseded IGs render alongside Published (per Oliver's "all IGs on
-    // Published" overview ask) but are excluded from the hero counts.
-    let active;
-    if (isAllView) {
-      active = published.concat(ballot).concat(superseded);
-    } else if (isBallotView) {
-      active = state.ballotKind === 'stu'  ? stu
-             : state.ballotKind === 'dstu' ? dstu
-             : ballot;
-    } else {
-      active = published.concat(superseded);
-    }
 
-    // Search filter
+    // Aggregate per-identifier on the FULL entry list so each card knows
+    // about both versions even when only one will render under the tab.
+    let aggs = aggregate(all);
+
+    // Drop aggregates with no version visible under the active tab.
+    aggs = aggs.filter(agg =>
+      visibleVersions(agg, state.view, state.ballotKind).length > 0);
+
+    // Search filter — match against shared fields (name/id/description).
     const q = state.search.trim().toLowerCase();
     if (q) {
-      active = active.filter(g =>
-        (g.name||'').toLowerCase().includes(q) ||
-        (g.identifier||'').toLowerCase().includes(q) ||
-        (g.description||'').toLowerCase().includes(q)
+      aggs = aggs.filter(agg =>
+        (agg.name||'').toLowerCase().includes(q) ||
+        (agg.identifier||'').toLowerCase().includes(q) ||
+        (agg.description||'').toLowerCase().includes(q)
       );
     }
 
-    // FHIR version filter
+    // FHIR version filter — keep aggregates with at least one version
+    // matching the picked FHIR release.
     if (state.fhirFilter) {
-      active = active.filter(g => (g.fhirVersion||[]).includes(state.fhirFilter));
+      aggs = aggs.filter(agg =>
+        agg.versions.some(v => (v.fhirVersion||[]).includes(state.fhirFilter))
+      );
     }
 
-    // Group by organization
+    // Group by organization.
     const byOrg = new Map();
-    for (const ig of active) {
-      const k = ig.organization.id;
-      if (!byOrg.has(k)) byOrg.set(k, { name: ig.organization.name, id: k, items: [] });
-      byOrg.get(k).items.push(ig);
+    for (const agg of aggs) {
+      const k = agg.organization.id;
+      if (!byOrg.has(k)) byOrg.set(k, { name: agg.organization.name, id: k, items: [] });
+      byOrg.get(k).items.push(agg);
     }
 
     const groups = [...byOrg.values()]
@@ -99,17 +174,15 @@
         if (bi !== -1) return 1;
         return a.name.localeCompare(b.name);
       })
-      .map((g, gi) => {
+      .map(g => {
         g.items.sort((a, b) => {
-          // Superseded IGs sink to the bottom of their org group.
-          const aSup = a.publicationStatus === 'superseded' ? 1 : 0;
-          const bSup = b.publicationStatus === 'superseded' ? 1 : 0;
-          if (aSup !== bSup) return aSup - bSup;
-          return (b.date || '').localeCompare(a.date || '');
+          const ta = tier(a), tb = tier(b);
+          if (ta !== tb) return ta - tb;
+          if (ta === 0) return pinIndex(a) - pinIndex(b);
+          return (b.maxDate || '').localeCompare(a.maxDate || '');
         });
         return {
           ...g,
-          indexLabel: String(gi + 1).padStart(2, '0'),
           count: g.items.length,
           plural: g.items.length === 1 ? '' : 's'
         };
@@ -119,29 +192,37 @@
       all, published, ballot, stu, dstu, superseded,
       groups,
       isBallotView,
+      isAllView,
       isEmpty: groups.length === 0
     };
   }
 
   // ─── Chip + badge factories ─────────────────────────────────────
-  function badgeFor(ig) {
-    if (ig.publicationStatus === 'superseded')  return { cls: 'badge superseded', text: 'SUPERSEDED' };
-    const isBallot = ig.publicationStatus === 'under-ballot';
-    if (!isBallot)                    return { cls: 'badge published', text: 'PUBLISHED' };
-    if (ig.ballotType === 'stu')      return { cls: 'badge stu',       text: 'STU BALLOT' };
-    return                                  { cls: 'badge dstu',      text: 'DSTU BALLOT' };
+  function badgeForVersion(v) {
+    if (v.publicationStatus === 'superseded')  return { cls: 'badge superseded', text: 'SUPERSEDED' };
+    if (v.publicationStatus === 'published')   return { cls: 'badge published',  text: 'PUBLISHED' };
+    if (v.ballotType === 'stu')                return { cls: 'badge stu',        text: 'STU BALLOT' };
+    return                                            { cls: 'badge dstu',       text: 'DSTU BALLOT' };
   }
 
-  function chipsFor(ig) {
-    const isBallot = ig.publicationStatus === 'under-ballot';
+  function versionChip(v) {
+    const isBallot = v.publicationStatus === 'under-ballot';
+    return {
+      cls:   isBallot ? 'chip danger' : 'chip primary',
+      icon:  '▤',
+      label: isBallot ? 'BALLOT IG' : 'IG',
+      url:   v.igUrl
+    };
+  }
+
+  function sharedChips(links) {
     const chips = [];
-    const L = ig.links || {};
-    if (L.ig)      chips.push({ cls: isBallot ? 'chip danger' : 'chip primary', icon: '▤', label: isBallot ? 'BALLOT IG' : 'IG',     url: L.ig });
-    if (L.ciBuild) chips.push({ cls: 'chip secondary', icon: '⟳', label: 'CI BUILD', url: L.ciBuild });
-    if (L.history) chips.push({ cls: 'chip secondary', icon: '↺', label: 'HISTORY',  url: L.history });
-    if (L.source)  chips.push({ cls: 'chip secondary', icon: '◉', label: 'GITHUB',   url: L.source });
-    if (L.wiki)    chips.push({ cls: 'chip ghost',     icon: '📓', label: 'WIKI',    url: L.wiki });
-    if (L.jira)    chips.push({ cls: 'chip ghost',     icon: '✎', label: 'JIRA',    url: L.jira });
+    const L = links || {};
+    if (L.ciBuild) chips.push({ cls: 'chip secondary', icon: '⟳',  label: 'CI BUILD', url: L.ciBuild });
+    if (L.history) chips.push({ cls: 'chip secondary', icon: '↺',  label: 'HISTORY',  url: L.history });
+    if (L.source)  chips.push({ cls: 'chip secondary', icon: '◉',  label: 'GITHUB',   url: L.source });
+    if (L.wiki)    chips.push({ cls: 'chip ghost',     icon: '📓', label: 'WIKI',     url: L.wiki });
+    if (L.jira)    chips.push({ cls: 'chip ghost',     icon: '✎',  label: 'JIRA',     url: L.jira });
     return chips;
   }
 
@@ -151,53 +232,57 @@
       + `<span class="icon">${chip.icon}</span><span>${escapeHtml(chip.label)}</span></a>`;
   }
 
-  function renderIgCard(ig) {
-    const isBallot = ig.publicationStatus === 'under-ballot';
-    const isSuperseded = ig.publicationStatus === 'superseded';
-    const badge = badgeFor(ig);
-    const chips = chipsFor(ig).map(renderChip).join('');
-    const fhirVersionStr = (ig.fhirVersion || []).join(', ') || '—';
-    const dateLabel = isBallot ? 'BALLOT CLOSES' : 'PUBLISHED';
-    const dateValue = isBallot ? fmtDate(ig.ballotCloses) : fmtDate(ig.date);
-    const versionStr = ig.version ? `v${escapeHtml(ig.version)}` : '—';
-
-    const supersededNote = isSuperseded && ig.supersededBy
-      ? `<div class="superseded-note">Superseded by <a href="${escapeHtml(ig.supersededBy.url)}" target="_blank" rel="noopener">${escapeHtml(ig.supersededBy.name)}</a>.</div>`
-      : '';
-
-    const workgroupMeta = ig.workgroup
-      ? `<span class="sep">·</span>
-         <span><span class="key">WORKGROUP</span>
-           <span class="val"><a href="${escapeHtml(ig.workgroup.url)}" target="_blank" rel="noopener">${escapeHtml(ig.workgroup.name)}</a></span>
-         </span>`
-      : '';
-
-    return `<div class="ig-card${isSuperseded ? ' is-superseded' : ''}">
-      <div>
-        <div class="title-row">
-          <span class="title">${escapeHtml(ig.name)}</span>
-          <span class="pkg-id">${escapeHtml(ig.identifier)}</span>
-          <span class="${badge.cls}">${badge.text}</span>
-        </div>
-        <div class="description">${escapeHtml(ig.description)}</div>
-        ${supersededNote}
-        <div class="meta">
-          <span><span class="key">VERSION</span> <span class="val">${versionStr}</span></span>
-          <span class="sep">·</span>
-          <span><span class="key">FHIR</span> <span class="val">${escapeHtml(fhirVersionStr)}</span></span>
-          <span class="sep">·</span>
-          <span><span class="key">${dateLabel}</span> <span class="val">${dateValue}</span></span>
-          ${workgroupMeta}
-        </div>
-      </div>
-      <div class="links-cluster">
-        <div class="links-row">${chips}</div>
-      </div>
+  function renderVersionRow(v) {
+    const badge = badgeForVersion(v);
+    const chip = renderChip(versionChip(v));
+    const fhirStr = (v.fhirVersion || []).join(', ') || '—';
+    const cls = (v.publicationStatus || '').replace(/[^a-z-]/g, '');
+    return `<div class="version-row ${cls}">
+      <span class="${badge.cls}">${badge.text}</span>
+      <span class="vno">v${escapeHtml(v.version || '—')}</span>
+      <span class="fhir">${escapeHtml(fhirStr)}</span>
+      <span class="date">${fmtDate(v.date)}</span>
+      <span class="version-chip">${chip}</span>
     </div>`;
   }
 
-  function renderGroup(group) {
-    const cards = group.items.map(renderIgCard).join('');
+  function renderIgCard(agg, view, ballotKind) {
+    const versions = visibleVersions(agg, view, ballotKind);
+    if (!versions.length) return '';
+
+    const supersededNote = agg.isSuperseded && agg.supersededBy
+      ? `<div class="superseded-note">Superseded by <a href="${escapeHtml(agg.supersededBy.url)}" target="_blank" rel="noopener">${escapeHtml(agg.supersededBy.name)}</a>.</div>`
+      : '';
+
+    const workgroupMeta = agg.workgroup
+      ? `<div class="meta">
+          <span><span class="key">WORKGROUP</span>
+            <span class="val"><a href="${escapeHtml(agg.workgroup.url)}" target="_blank" rel="noopener">${escapeHtml(agg.workgroup.name)}</a></span>
+          </span>
+        </div>`
+      : '';
+
+    const sharedChipsHtml = sharedChips(agg.links).map(renderChip).join('');
+
+    return `<div class="ig-card${agg.isSuperseded ? ' is-superseded' : ''}">
+      <div class="ig-shared">
+        <div class="title-row">
+          <span class="title">${escapeHtml(agg.name)}</span>
+          <span class="pkg-id">${escapeHtml(agg.identifier)}</span>
+        </div>
+        <div class="description">${escapeHtml(agg.description)}</div>
+        ${supersededNote}
+        ${workgroupMeta}
+      </div>
+      <div class="versions">
+        ${versions.map(renderVersionRow).join('')}
+      </div>
+      ${sharedChipsHtml ? `<div class="shared-chips">${sharedChipsHtml}</div>` : ''}
+    </div>`;
+  }
+
+  function renderGroup(group, view, ballotKind) {
+    const cards = group.items.map(agg => renderIgCard(agg, view, ballotKind)).join('');
     return `<div class="org-group">
       <div class="org-header">
         <div class="left">
@@ -211,8 +296,8 @@
     </div>`;
   }
 
-  function renderGroups(groups) {
-    return groups.map(renderGroup).join('');
+  function renderGroups(groups, view, ballotKind) {
+    return groups.map(g => renderGroup(g, view, ballotKind)).join('');
   }
 
   // ─── DOM updates ────────────────────────────────────────────────
@@ -259,7 +344,7 @@
     if (v.isEmpty) {
       root.innerHTML = `<div class="empty-state">— No guides in this category —</div>`;
     } else {
-      root.innerHTML = renderGroups(v.groups);
+      root.innerHTML = renderGroups(v.groups, state.view, state.ballotKind);
     }
   }
 

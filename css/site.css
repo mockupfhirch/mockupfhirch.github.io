@@ -434,11 +434,11 @@ button { font-family: inherit; }
   color: #64748b;
 }
 
-/* IG cards */
+/* IG cards — one per IG, with one .version-row per version */
 .ig-card {
-  display: grid;
-  grid-template-columns: 1.4fr 1fr;
-  gap: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
   padding: 22px 0;
   border-bottom: 1px solid #e2e8f0;
 }
@@ -465,7 +465,7 @@ button { font-family: inherit; }
   font-size: 14px;
   color: #334155;
   line-height: 1.45;
-  max-width: 560px;
+  max-width: 720px;
   margin-bottom: 10px;
 }
 .ig-card .meta {
@@ -481,17 +481,38 @@ button { font-family: inherit; }
 .ig-card .meta .val { color: #0f172a; font-weight: 600; }
 .ig-card .meta .sep { color: #cbd5e1; }
 
-.ig-card .links-cluster {
+/* Version sub-rows */
+.versions {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  align-items: flex-start;
-  padding-top: 2px;
 }
-.ig-card .links-row {
+.version-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 8px 12px;
+  background: #f8fafc;
+  border-left: 3px solid #cbd5e1;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12px;
+  color: #334155;
+  flex-wrap: wrap;
+}
+.version-row .vno   { color: #0c2a4d; font-weight: 600; min-width: 110px; }
+.version-row .fhir  { color: #475569; min-width: 64px; }
+.version-row .date  { color: #64748b; min-width: 110px; }
+.version-row .version-chip { margin-left: auto; }
+.version-row.published    { border-left-color: #1f6b3a; }
+.version-row.under-ballot { border-left-color: #d62828; }
+.version-row.superseded   { border-left-color: #94a3b8; opacity: 0.85; }
+
+/* Shared chips (CI / HISTORY / GITHUB / WIKI / JIRA) at the card footer */
+.shared-chips {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+  padding-top: 2px;
 }
 
 /* Badges */

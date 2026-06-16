@@ -281,28 +281,27 @@
     return 'stu';
   }
 
-  function buildIgEntry(pkg, plist) {
+  // Build one fully-formed IG entry for a specific version.
+  //
+  //   pkg            — upstream package-registry.json entry (shared metadata)
+  //   plist          — upstream per-IG package-list.json (for introduction etc.)
+  //   versionEntry   — the specific version object from plist.list (or pkg.latest
+  //                    as a fallback); supplies version/date/path/fhirversion/status/sequence
+  //   status         — final publicationStatus to assign ('published'|'under-ballot'|'superseded')
+  function buildOne(pkg, plist, versionEntry, status) {
     var pkgId = pkg['package-id'];
-    var latest = pkg.latest || {};
-    var version = latest.version;
-    if (!version || version === 'current') return null;
-
-    var entry = null;
-    if (plist && plist.list) {
-      for (var i = 0; i < plist.list.length; i++) {
-        if (plist.list[i].version === version) { entry = plist.list[i]; break; }
-      }
-    }
-
     var over = OVERRIDES[pkgId] || {};
-    var status = over.publicationStatus || derivePublicationStatus(version, entry || {});
     var orgId = over.organization || DEFAULT_ORG;
     var description = over.description
       || (plist && plist.introduction)
       || pkg.title || '';
-    var fhirVersion = (entry && entry.fhirversion) ? [entry.fhirversion] : [];
+    var fhirVersion = versionEntry && versionEntry.fhirversion ? [versionEntry.fhirversion] : [];
     var canonical = (pkg.canonical || '').replace(/\/$/, '');
-    var versionedUrl = canonical ? canonical + '/' + version + '/' : (latest.path || '');
+    var version = versionEntry && versionEntry.version;
+    var versionPath = (versionEntry && versionEntry.path) || '';
+    var versionedUrl = versionPath
+      ? versionPath.replace(/\/?$/, '/')
+      : (canonical && version ? canonical + '/' + version + '/' : '');
     var slug = pkgId.indexOf('ch.fhir.ig.') === 0 ? pkgId.slice('ch.fhir.ig.'.length) : pkgId;
 
     var overLinks = over.links || {};
@@ -322,7 +321,7 @@
       description: (description || '').trim(),
       version: version,
       fhirVersion: fhirVersion,
-      date: latest.date || '',
+      date: (versionEntry && versionEntry.date) || '',
       publicationStatus: status,
       organization: { id: orgId, name: ORG_NAMES[orgId] || orgId },
       url: versionedUrl,
@@ -332,10 +331,59 @@
     if (over.workgroup) ig.workgroup = over.workgroup;
     if (status === 'superseded' && over.supersededBy) ig.supersededBy = over.supersededBy;
     if (status === 'under-ballot') {
-      ig.ballotType = over.ballotType || deriveBallotType(entry || {});
+      ig.ballotType = over.ballotType || deriveBallotType(versionEntry || {});
       if (over.ballotCloses) ig.ballotCloses = over.ballotCloses;
     }
     return ig;
+  }
+
+  // Emit 0, 1, or 2 entries per IG — one for the latest published
+  // version, one for the latest ballot version, when those exist.
+  function buildIgEntries(pkg, plist) {
+    var pkgId = pkg['package-id'];
+    var latest = pkg.latest || {};
+    if (!latest.version || latest.version === 'current') return [];
+    var over = OVERRIDES[pkgId] || {};
+
+    // Synthesize a "versionEntry" from pkg.latest as a last-resort fallback,
+    // so the loader still works when plist.list is missing or empty.
+    var latestAsEntry = {
+      version: latest.version,
+      path: latest.path || '',
+      date: latest.date || '',
+      fhirversion: '',
+      status: /-ballot$/.test(latest.version) ? 'ballot' : 'trial-use',
+      sequence: ''
+    };
+
+    // Override short-circuits — preserve current behavior for these IGs.
+    if (over.publicationStatus === 'superseded') {
+      return [buildOne(pkg, plist, latestAsEntry, 'superseded')];
+    }
+    if (over.publicationStatus === 'published') {
+      // ch-epr-fhir: upstream marks 5.0.0 as status='ballot' but it's released.
+      return [buildOne(pkg, plist, latestAsEntry, 'published')];
+    }
+
+    // Walk plist.list (newest first) — pick latest non-ballot and latest ballot.
+    var pub = null, bal = null;
+    var list = (plist && plist.list) || [];
+    for (var i = 0; i < list.length; i++) {
+      var v = list[i];
+      if (!v.version || v.version === 'current' || v.status === 'ci-build') continue;
+      if (v.status === 'ballot') { if (!bal) bal = v; }
+      else                       { if (!pub) pub = v; }
+      if (pub && bal) break;
+    }
+
+    if (!pub && !bal) {
+      // No usable plist — fall back to pkg.latest.
+      return [buildOne(pkg, plist, latestAsEntry, derivePublicationStatus(latest.version, {}))];
+    }
+    var out = [];
+    if (pub) out.push(buildOne(pkg, plist, pub, 'published'));
+    if (bal) out.push(buildOne(pkg, plist, bal, 'under-ballot'));
+    return out;
   }
 
   function loadIgs() {
@@ -354,8 +402,8 @@
       return Promise.all(listPromises).then(function (plists) {
         var graph = [];
         for (var i = 0; i < packages.length; i++) {
-          var entry = buildIgEntry(packages[i], plists[i]);
-          if (entry) graph.push(entry);
+          var entries = buildIgEntries(packages[i], plists[i]);
+          for (var k = 0; k < entries.length; k++) graph.push(entries[k]);
         }
         for (var j = 0; j < EXTRA_IGS.length; j++) {
           if (BLACKLIST.has(EXTRA_IGS[j].identifier)) continue;
