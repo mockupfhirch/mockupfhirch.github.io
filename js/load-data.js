@@ -25,23 +25,31 @@
     'ch.fhir.ig.ch-epr-mhealth'   // superseded by CH EPR FHIR — hidden per HL7 CH (Oliver, 2026-06-16)
   ]);
 
-  // ──────────────── Ballot vote forms (current cycle) ────────────────
-  // HL7.ch Google Forms voters use to submit their ballot. Keys are
-  // package-ids; values are the Drive file id of the matching form.
-  // Only entries whose IG has an open ballot (status === 'under-ballot')
-  // surface a VOTE chip — see buildOne below. Update once per ballot
-  // cycle — see README.md → "Updating the ballot vote forms".
-  var BALLOT_VOTE_FORMS = {
-    // 2026 cycle
-    'ch.fhir.ig.ch-alis-connect': '1Ge_9fwM_yd3ZaLBwumlQuMzlz1AaZi1RAAeMw6RlDds',
-    'ch.fhir.ig.ch-core':         '1KpM4JShkLgxPdYZp302tn4P67a4SPVpzaAMavDWjoZM',
-    'ch.fhir.ig.ch-emr':          '1Gdno09fFDJZJ5oKwqCmEqEHE0pHzev-ZPwvaon2qM5I',
-    'ch.fhir.ig.ch-ems':          '1CerI1Fk09RYYFX8ofg7MYCpzpDtG4NhwnfaTv24GLCo',
-    'ch.fhir.ig.ch-idmp':         '1IqLR7ER3hgs6-Qaplig0QHOAOY3gGLtdy9i2xAMYaCM',
-    'ch.fhir.ig.ch-umzh-connect': '1ySV0k7cwbj5ybjzgFLv9sz1nHCFJBXiMat_wgJKdJ1g',
-    'ch.fhir.ig.ch-vacd':         '1YoEE_hDSb3jcvv8GkPG3w-LikLWRH2z8_GV7NSKK8nQ'
+  // ─────────────────── Current ballot cycle ───────────────────
+  // Single source of truth for everything the catalog needs to
+  // surface a HL7.ch ballot. When non-null, drives:
+  //   • the green VOTE chip on each per-IG ballot row,
+  //   • the blue "Register to vote · Ballot YYYY →" hero button.
+  // Set BALLOT_CYCLE = null to close the cycle — chips and button
+  // both vanish, no other edits required. See QUICKSTART.md.
+  var BALLOT_CYCLE = {
+    year:                '2026',
+    registrationFormId:  '13zN8gpFz_XjTDf3MZHo8E0SL9xjj8TJQ8AxcZQONOwY',
+    forms: {
+      'ch.fhir.ig.ch-alis-connect': '1Ge_9fwM_yd3ZaLBwumlQuMzlz1AaZi1RAAeMw6RlDds',
+      'ch.fhir.ig.ch-core':         '1KpM4JShkLgxPdYZp302tn4P67a4SPVpzaAMavDWjoZM',
+      'ch.fhir.ig.ch-emr':          '1Gdno09fFDJZJ5oKwqCmEqEHE0pHzev-ZPwvaon2qM5I',
+      'ch.fhir.ig.ch-ems':          '1CerI1Fk09RYYFX8ofg7MYCpzpDtG4NhwnfaTv24GLCo',
+      'ch.fhir.ig.ch-idmp':         '1IqLR7ER3hgs6-Qaplig0QHOAOY3gGLtdy9i2xAMYaCM',
+      'ch.fhir.ig.ch-umzh-connect': '1ySV0k7cwbj5ybjzgFLv9sz1nHCFJBXiMat_wgJKdJ1g',
+      'ch.fhir.ig.ch-vacd':         '1YoEE_hDSb3jcvv8GkPG3w-LikLWRH2z8_GV7NSKK8nQ'
+    }
   };
+  // var BALLOT_CYCLE = null;   // ← uncomment when the cycle closes
+
+  var BALLOT_VOTE_FORMS = (BALLOT_CYCLE && BALLOT_CYCLE.forms) || {};
   function voteFormUrl(id) { return 'https://docs.google.com/forms/d/' + id + '/viewform'; }
+  window.FHIR_CH_BALLOT_CYCLE = BALLOT_CYCLE;
 
   // ─── HL7 CH workgroup shorthands ────────────────────────────────────
   // Per-IG attribution restored from the legacy index.legacy.html cards.

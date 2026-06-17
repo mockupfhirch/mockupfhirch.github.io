@@ -14,9 +14,9 @@ The fast path for maintaining the fhir.ch IG catalog. If you just need to start 
                           ▼
                  js/load-data.js    ← curated overlay
                  (OVERRIDES,          (workgroup, organization,
-                  BLACKLIST,           description, ballot info,
-                  EXTRA_IGS,           hidden IGs, vote forms…)
-                  BALLOT_VOTE_FORMS)
+                  BLACKLIST,           description, hidden IGs,
+                  EXTRA_IGS,           extra IGs, ballot cycle)
+                  BALLOT_CYCLE)
                           │
                           ▼
                   js/app.js         ← renderer
@@ -45,7 +45,7 @@ An internet connection is required — the catalog data is fetched at load time,
 |---|---|---|
 | IG metadata (workgroup, organization, description, ballot info) | `js/load-data.js` → `OVERRIDES` | Keyed by `package-id`. |
 | Whether an IG appears at all | `js/load-data.js` → `BLACKLIST` or `EXTRA_IGS` | Drop / add. |
-| Ballot vote form links | `js/load-data.js` → `BALLOT_VOTE_FORMS` | One Drive file id per IG. |
+| Ballot vote forms + hero "Register to vote" button | `js/load-data.js` → `BALLOT_CYCLE` | One object for the whole cycle; set to `null` to close. |
 | Hero buttons, ballot sub-tab strip, page header | `index.html` | Static markup; no template engine. |
 | **The actual catalog data** (a new IG, a new version, a fixed title) | **PR against [`hl7ch/hl7ch.github.io`](https://github.com/hl7ch/hl7ch.github.io)** | Don't try to fake it locally — file the PR upstream. |
 
@@ -54,14 +54,27 @@ An internet connection is required — the catalog data is fetched at load time,
 ### Open a ballot cycle
 
 1. In Google Drive, find each `<IG short name> - HL7.ch Ballot 20XX` form plus the `Registration HL7.ch Ballots 20XX` form. Each Drive URL is `https://docs.google.com/forms/d/<FILE_ID>/edit` — copy the `<FILE_ID>` segment.
-2. In `js/load-data.js`, update `BALLOT_VOTE_FORMS` (just below `BLACKLIST`). Keys are `package-id`s, values are the Drive file id only — the loader builds the public form URL itself. Update the `// 20XX cycle` comment.
-3. In `index.html`, update the **Register to vote · Ballot 20XX →** button in `.hero-cta` (around line 78): `href` to the registration form, label year to match. Make sure it sits at `.btn primary` (and "Join FHIR.ch work group calls" at `.btn outline`) for the duration of the cycle.
-4. Reload `http://localhost:8000/`: every open ballot row gets a green **VOTE** chip, the hero shows a blue **Register to vote · Ballot 20XX →** button.
+2. In `js/load-data.js`, fill in the `BALLOT_CYCLE` object (just below `BLACKLIST`):
+
+   ```js
+   var BALLOT_CYCLE = {
+     year:                '20XX',
+     registrationFormId:  '<REGISTRATION_FILE_ID>',
+     forms: {
+       'ch.fhir.ig.ch-core':  '<CORE_FILE_ID>',
+       'ch.fhir.ig.ch-emr':   '<EMR_FILE_ID>',
+       // …one entry per per-IG form
+     }
+   };
+   ```
+
+   Reload `http://localhost:8000/`: every open ballot row gets a green **VOTE** chip, the hero shows a blue **Register to vote · Ballot 20XX →** button. No HTML edit required — `js/app.js` reads `BALLOT_CYCLE` on load and toggles the hero buttons.
 
 ### Close a ballot cycle
 
-1. Empty `BALLOT_VOTE_FORMS` in `js/load-data.js` (leave one commented-out example so the next curator sees the shape).
-2. In `index.html`, remove the **Register to vote · Ballot 20XX →** button from `.hero-cta`. Promote **Join FHIR.ch work group calls** back to `.btn primary`.
+Set `BALLOT_CYCLE = null` in `js/load-data.js`. That's it — the hero Register button hides, "Join FHIR.ch work group calls" goes back to primary, and every per-IG VOTE chip disappears. No other edits needed.
+
+> **Dev-mode sanity check.** When you're running on `localhost` / `127.0.0.1` / `file://`, the page prints `[ballot-cycle]` warnings to the browser console for any drift between `BALLOT_CYCLE` and the catalog data: `BALLOT_CYCLE` is `null` while IGs are still under-ballot, an under-ballot IG has no form entry, a `BALLOT_CYCLE.forms` key is stale / a typo / references a now-published IG, or `BALLOT_CYCLE.year` doesn't match any IG's `ballotCloses` year. Open devtools after any edit and you'll see what to fix. Production hostnames stay silent.
 
 ### Curate an IG (workgroup, organization, description, ballot dates)
 

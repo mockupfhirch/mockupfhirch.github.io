@@ -81,7 +81,7 @@ The loader is the single source of curated overlay on top of the upstream JSON:
   - `links` — `{source, wiki, jira}`; override the default `github.com/hl7ch/{slug}` derivation.
   - `publicationStatus: 'published'` — force-promote an upstream entry tagged `ballot` to published (currently used only by `ch-epr-fhir`).
 - **`EXTRA_IGS`** — array of fully-specified IG entries appended to the catalog. Use this only for IGs upstream does not yet list (currently Swissnoso and MedNet Interface). Copy an existing entry as the template — every field shown there is required.
-- **`BALLOT_VOTE_FORMS`** — per-IG Google Form Drive ids for the current ballot cycle. Drives the green **VOTE** chip rendered on each open ballot row. Entries for IGs whose status isn't `under-ballot` are silently ignored. See [Updating the ballot vote forms](#updating-the-ballot-vote-forms) for the per-cycle procedure.
+- **`BALLOT_CYCLE`** — single object that owns the current ballot cycle: the year, the registration form Drive id, and the per-IG form Drive ids. Drives both the green **VOTE** chip on each open ballot row and the blue **Register to vote · Ballot YYYY →** hero button. Set to `null` between cycles. See [Updating the ballot vote forms](#updating-the-ballot-vote-forms) for the per-cycle procedure.
 - **`ORG_NAMES`** and **`ORG_ORDER`** — display name per organization `id`. The `id` keys are what `OVERRIDES.organization` references. IGs with no `organization` override and no fallback signal default to `'hl7ch'`.
 - **`WG_*` shorthands** — reusable workgroup objects. Add new ones rather than inlining `{name, url}` literals.
 
@@ -111,10 +111,7 @@ Rendering pins (in `js/app.js`):
 
 ## Updating the ballot vote forms
 
-Each ballot cycle, HL7.ch publishes one Google Form per IG under ballot, plus one registry-wide registration form. Two places in this repo reference those forms and must be updated together at the start of each cycle. The end result is:
-
-- A green **VOTE** chip on every open ballot's row, linking to that IG's Google Form.
-- A blue **Register to vote · Ballot 20XX →** button in the page hero, linking to the registry-wide registration form.
+Each ballot cycle, HL7.ch publishes one Google Form per IG under ballot, plus one registry-wide registration form. All cycle data lives in a single `BALLOT_CYCLE` object in `js/load-data.js`. When non-null, the page renders the blue **Register to vote · Ballot YYYY →** hero button and a green **VOTE** chip on every open-ballot row. When `null`, both vanish.
 
 ### Step 1 — Find the form Drive file ids
 
@@ -124,30 +121,25 @@ The forms live in HL7.ch's Google Drive. With Drive access:
 2. Open each form. The URL looks like `https://docs.google.com/forms/d/<FILE_ID>/edit`. Copy the `<FILE_ID>` segment (the long string between `/d/` and `/edit`).
 3. Note which IG each form is for — the form title carries the short name (e.g. *CH Core - HL7.ch Ballot 2026*), and you need to match that to the IG's `package-id` (e.g. `ch.fhir.ig.ch-core`). The mapping is by shortname → `ch.fhir.ig.<lowercased-shortname>`.
 
-### Step 2 — Update `BALLOT_VOTE_FORMS` in `js/load-data.js`
+### Step 2 — Fill in `BALLOT_CYCLE` in `js/load-data.js`
 
-Open `js/load-data.js` and find the `BALLOT_VOTE_FORMS` map near the top of the file (just below `BLACKLIST`). It looks like:
+Open `js/load-data.js` and find the `BALLOT_CYCLE` object near the top of the file (just below `BLACKLIST`). Fill it in:
 
 ```js
-var BALLOT_VOTE_FORMS = {
-  // 2026 cycle
-  'ch.fhir.ig.ch-core':  '1KpM4JShkLgxPdYZp302tn4P67a4SPVpzaAMavDWjoZM',
-  'ch.fhir.ig.ch-emr':   '1Gdno09fFDJZJ5oKwqCmEqEHE0pHzev-ZPwvaon2qM5I',
-  // …one entry per active per-IG form
+var BALLOT_CYCLE = {
+  year:                '20XX',
+  registrationFormId:  '<REGISTRATION_FILE_ID>',
+  forms: {
+    'ch.fhir.ig.ch-core':  '<CORE_FILE_ID>',
+    'ch.fhir.ig.ch-emr':   '<EMR_FILE_ID>',
+    // …one entry per active per-IG form
+  }
 };
 ```
 
-Replace the entries with the package-ids and Drive file ids you collected in Step 1. Update the `// 20XX cycle` comment to the new year. The loader builds the public form URL itself (the `voteFormUrl` helper just below the map) — you only need the file id, not the whole URL.
+The loader builds the public form URLs from the file ids — you never need to paste a `docs.google.com` URL anywhere. Form↔IG matching is by `package-id`, not by form title; if you add a new IG mid-cycle, both `OVERRIDES` and `BALLOT_CYCLE.forms` need an entry.
 
-Entries for IGs whose ballot is not currently open (`status` isn't `under-ballot`) are silently ignored, so leaving a stale entry is harmless but messy. Prefer to delete entries from prior cycles.
-
-### Step 3 — Update the hero registration URL
-
-The registry-wide registration form has the same Drive id format, but it's pasted directly into HTML rather than the JS map. Update the **Register to vote · Ballot 20XX →** button in `.hero-cta` (around line 78 of `index.html`) — both the `href` and the "Ballot 20XX" label so the year stays current.
-
-The URL follows the shape `https://docs.google.com/forms/d/<REGISTRATION_FILE_ID>/viewform`.
-
-### Step 4 — Test locally
+### Step 3 — Test locally
 
 From the project root, in a terminal:
 
@@ -163,14 +155,7 @@ Open <http://localhost:8000>. Verify:
 
 ### End-of-cycle cleanup
 
-When the ballot cycle closes:
-
-1. Empty `BALLOT_VOTE_FORMS` in `js/load-data.js` (or leave a single commented-out example so the structure stays visible for the next curator).
-2. In `index.html`, remove the **Register to vote · Ballot 20XX →** button from `.hero-cta`. Promote the **Join FHIR.ch work group calls** button back to `.btn primary` (it sits at `.btn outline` during ballot cycles so the registration button can take the primary slot).
-
-That returns the catalog to its quiet-state design until the next cycle begins.
-
-Form↔IG matching is by `package-id`, not by form title. If you add a new IG mid-cycle, both `OVERRIDES` and `BALLOT_VOTE_FORMS` need an entry.
+Set `BALLOT_CYCLE = null` in `js/load-data.js`. That's it — the hero Register button hides, "Join FHIR.ch work group calls" goes back to primary with its trailing arrow, and every per-IG VOTE chip disappears. No HTML edit needed; `js/app.js` reads the constant on load and toggles the hero buttons.
 
 ## What is NOT in the upstream contract
 

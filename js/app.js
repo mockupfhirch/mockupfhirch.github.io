@@ -372,14 +372,101 @@
     el('search-input').addEventListener('input', (e) => setState({ search: e.target.value }));
   }
 
+  // ─── Dev-only validation ────────────────────────────────────────
+  // Runs only on localhost / 127.0.0.1 / file:// — same spirit as
+  // load-data.js's "uncurated IGs" console.warn. Surfaces mismatches
+  // between the BALLOT_CYCLE switch and the actual catalog data.
+  function isDev() {
+    const h = location.hostname;
+    return !h || h === 'localhost' || h === '127.0.0.1' || h === '[::1]';
+  }
+
+  function validateBallotCycle(igs) {
+    if (!isDev()) return;
+    const cycle = window.FHIR_CH_BALLOT_CYCLE;
+    const underBallot = igs.filter(g => g.publicationStatus === 'under-ballot');
+    const underBallotIds = new Set(underBallot.map(g => g.identifier));
+    const allIds = new Set(igs.map(g => g.identifier));
+    const warn = (msg) => console.warn('[ballot-cycle]', msg);
+
+    if (!cycle) {
+      if (underBallot.length) {
+        warn(`BALLOT_CYCLE is null but ${underBallot.length} IG(s) are under-ballot: ${[...underBallotIds].join(', ')}. Set BALLOT_CYCLE in js/load-data.js to surface the Register button + VOTE chips.`);
+      }
+      return;
+    }
+
+    if (!cycle.registrationFormId) {
+      warn('BALLOT_CYCLE.registrationFormId is empty — the hero "Register to vote" button will not appear.');
+    }
+
+    const formIds = Object.keys(cycle.forms || {});
+
+    const stale = formIds.filter(id => !underBallotIds.has(id) && allIds.has(id));
+    if (stale.length) {
+      warn(`Stale entries in BALLOT_CYCLE.forms (these IGs are not under-ballot): ${stale.join(', ')}. Prune them.`);
+    }
+
+    const missing = [...underBallotIds].filter(id => !formIds.includes(id));
+    if (missing.length) {
+      warn(`Under-ballot IGs missing from BALLOT_CYCLE.forms (no VOTE chip will appear): ${missing.join(', ')}.`);
+    }
+
+    const typos = formIds.filter(id => !allIds.has(id));
+    if (typos.length) {
+      warn(`Unknown package-ids in BALLOT_CYCLE.forms (typo or stale): ${typos.join(', ')}.`);
+    }
+
+    if (cycle.year && underBallot.length) {
+      const yearStr = String(cycle.year);
+      const seenYears = [...new Set(
+        underBallot
+          .map(g => g.ballotCloses && g.ballotCloses.slice(0, 4))
+          .filter(Boolean)
+      )];
+      if (seenYears.length && !seenYears.includes(yearStr)) {
+        warn(`BALLOT_CYCLE.year is "${cycle.year}" but under-ballot IGs have ballotCloses year(s): ${seenYears.join(', ')}. Check OVERRIDES.ballotCloses.`);
+      }
+    }
+  }
+
+  // ─── Hero ballot toggle ─────────────────────────────────────────
+  // Reads window.FHIR_CH_BALLOT_CYCLE (set synchronously by load-data.js).
+  // Active cycle → Register button visible + primary; Join demoted to outline.
+  // No cycle → Register hidden; Join restored to primary with trailing arrow.
+  function applyBallotCycle() {
+    const cycle = window.FHIR_CH_BALLOT_CYCLE;
+    const vote  = document.getElementById('hero-vote-btn');
+    const join  = document.getElementById('hero-join-btn');
+    if (!vote || !join) return;
+    if (cycle && cycle.registrationFormId) {
+      vote.href        = `https://docs.google.com/forms/d/${cycle.registrationFormId}/viewform`;
+      vote.textContent = `Register to vote · Ballot ${cycle.year} →`;
+      vote.hidden      = false;
+      join.classList.remove('primary');
+      join.classList.add('outline');
+      join.textContent = 'Join FHIR.ch work group calls';
+    } else {
+      vote.hidden      = true;
+      join.classList.remove('outline');
+      join.classList.add('primary');
+      join.textContent = 'Join FHIR.ch work group calls →';
+    }
+  }
+
   // ─── Bootstrap ──────────────────────────────────────────────────
   function start() {
+    applyBallotCycle();
     wire();
     // Initial render — shows empty state until data arrives.
     render();
     // Wait for IG data, then re-render with real values.
     (function tick() {
-      if (window.FHIR_CH_IGS) { render(); return; }
+      if (window.FHIR_CH_IGS) {
+        validateBallotCycle(window.FHIR_CH_IGS);
+        render();
+        return;
+      }
       setTimeout(tick, 40);
     })();
   }

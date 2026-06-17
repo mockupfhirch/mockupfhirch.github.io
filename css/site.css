@@ -200,6 +200,7 @@ button { font-family: inherit; }
   font-weight: 600;
   cursor: pointer;
 }
+.btn[hidden] { display: none; }
 .btn.primary { background: #1f5aa6; color: #fff; border: 1px solid #1f5aa6; }
 .btn.outline { background: #fff; color: #0f172a; border: 1px solid #cbd5e1; }
 .btn.ghost   { background: transparent; color: #1f5aa6; border: none; }
