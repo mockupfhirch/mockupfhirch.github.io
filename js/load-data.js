@@ -4,14 +4,14 @@
 //   window.FHIR_CH_IGS    Array of Implementation Guide entries
 //
 // Data source (live browser fetch, no build step, open CORS):
-//   https://raw.githubusercontent.com/benjamin-arfa/hl7ch.github.io/main/
+//   https://raw.githubusercontent.com/hl7ch/hl7ch.github.io/main/
 //     package-registry.json + per-IG package-list.json
 
 (function () {
   'use strict';
 
   // ───────────────────────────── Source ──────────────────────────────
-  var GH_BASE = 'https://raw.githubusercontent.com/benjamin-arfa/hl7ch.github.io/main';
+  var GH_BASE = 'https://raw.githubusercontent.com/hl7ch/hl7ch.github.io/main';
   var REGISTRY_URL = GH_BASE + '/package-registry.json';
 
   // ──────────────────────────── Blacklist ────────────────────────────
@@ -19,8 +19,29 @@
   // to both upstream packages and EXTRA_IGS. Add a one-line comment per
   // entry explaining WHY it is excluded, so future curators have context.
   var BLACKLIST = new Set([
-    'ch.fhir.ig.ch-ig'   // empty example/template IG, not for the public registry
+    'ch.fhir.ig.ch-ig',           // empty example/template IG, not for the public registry
+    'ch.fhir.ig.ch-atc',          // superseded by CH EPR FHIR — hidden per HL7 CH (Oliver, 2026-06-16)
+    'ch.fhir.ig.ch-epr-ppqm',     // superseded by CH EPR FHIR — hidden per HL7 CH (Oliver, 2026-06-16)
+    'ch.fhir.ig.ch-epr-mhealth'   // superseded by CH EPR FHIR — hidden per HL7 CH (Oliver, 2026-06-16)
   ]);
+
+  // ──────────────── Ballot vote forms (current cycle) ────────────────
+  // HL7.ch Google Forms voters use to submit their ballot. Keys are
+  // package-ids; values are the Drive file id of the matching form.
+  // Only entries whose IG has an open ballot (status === 'under-ballot')
+  // surface a VOTE chip — see buildOne below. Update once per ballot
+  // cycle — see README.md → "Updating the ballot vote forms".
+  var BALLOT_VOTE_FORMS = {
+    // 2026 cycle
+    'ch.fhir.ig.ch-alis-connect': '1Ge_9fwM_yd3ZaLBwumlQuMzlz1AaZi1RAAeMw6RlDds',
+    'ch.fhir.ig.ch-core':         '1KpM4JShkLgxPdYZp302tn4P67a4SPVpzaAMavDWjoZM',
+    'ch.fhir.ig.ch-emr':          '1Gdno09fFDJZJ5oKwqCmEqEHE0pHzev-ZPwvaon2qM5I',
+    'ch.fhir.ig.ch-ems':          '1CerI1Fk09RYYFX8ofg7MYCpzpDtG4NhwnfaTv24GLCo',
+    'ch.fhir.ig.ch-idmp':         '1IqLR7ER3hgs6-Qaplig0QHOAOY3gGLtdy9i2xAMYaCM',
+    'ch.fhir.ig.ch-umzh-connect': '1ySV0k7cwbj5ybjzgFLv9sz1nHCFJBXiMat_wgJKdJ1g',
+    'ch.fhir.ig.ch-vacd':         '1YoEE_hDSb3jcvv8GkPG3w-LikLWRH2z8_GV7NSKK8nQ'
+  };
+  function voteFormUrl(id) { return 'https://docs.google.com/forms/d/' + id + '/viewform'; }
 
   // ─── HL7 CH workgroup shorthands ────────────────────────────────────
   // Per-IG attribution restored from the legacy index.legacy.html cards.
@@ -31,13 +52,6 @@
   var WG_LAB    = { name: 'Joint Venture Laborprojekt', url: TC_URL };
   var WG_EPD    = { name: 'Joint Venture Arbeitsgruppe EPD', url: TC_URL };
 
-  // ─── Superseded marker (CH ATC / PPQm / mHealth → CH EPR FHIR) ──────
-  var SUPERSEDED_BY_EPR_FHIR = {
-    id: 'ch.fhir.ig.ch-epr-fhir',
-    name: 'CH EPR FHIR',
-    url: 'http://fhir.ch/ig/ch-epr-fhir/'
-  };
-
   // ─────────────────────────── IG overrides ──────────────────────────
   // Hand-curated per-IG metadata that upstream doesn't provide:
   //   organization     (id matching ORG_NAMES below)
@@ -47,9 +61,8 @@
   //   description      (overrides upstream introduction — restored from
   //                    legacy index.legacy.html, the community-validated text)
   //   links            ({source, wiki, jira})
-  //   publicationStatus override ("published" | "superseded")
-  //   supersededBy     ({id, name, url}) — only set when publicationStatus
-  //                    is "superseded"
+  //   publicationStatus override ("published") — forces a release tagged
+  //                    'ballot' upstream to render as published
   // IGs not listed here default to organization: 'hl7ch'.
   var OVERRIDES = {
     // ─── HL7 Switzerland — Arbeitsgruppe FHIR ────────────────────────
@@ -147,20 +160,6 @@
       organization: 'ehealth-suisse'
     },
 
-    // ─── Superseded by CH EPR FHIR ───────────────────────────────────
-    'ch.fhir.ig.ch-atc': {
-      publicationStatus: 'superseded',
-      supersededBy: SUPERSEDED_BY_EPR_FHIR
-    },
-    'ch.fhir.ig.ch-epr-ppqm': {
-      publicationStatus: 'superseded',
-      supersededBy: SUPERSEDED_BY_EPR_FHIR
-    },
-    'ch.fhir.ig.ch-epr-mhealth': {
-      publicationStatus: 'superseded',
-      supersededBy: SUPERSEDED_BY_EPR_FHIR
-    },
-
     // ─── CARA ────────────────────────────────────────────────────────
     'ch.fhir.ig.ch-emed-epr': {
       organization: 'cara',
@@ -171,6 +170,17 @@
     'ch.fhir.ig.ch-idmp': {
       organization: 'refdata',
       description: 'IDMP base Implementation Guide published by Refdata Foundation for Swissmedic.'
+    },
+
+    // ─── Universitätsmedizin Zürich ──────────────────────────────────
+    'ch.fhir.ig.ch-umzh-connect': {
+      organization: 'umzh',
+      description: 'FHIR Implementation Guide for the University Medicine Zurich (UMZH) focusing on referral processes.',
+      ballotType: 'dstu',
+      links: {
+        source: 'https://github.com/umzhconnect/umzhconnect-ig',
+        wiki: 'https://github.com/umzhconnect/umzhconnect-ig/wiki'
+      }
     }
     // Example with ballot info:
     // 'ch.fhir.ig.ch-core': { ballotCloses: '2026-07-15', ballotType: 'stu' }
@@ -196,30 +206,45 @@
   // ──────────────────────────── Defaults ─────────────────────────────
   var DEFAULT_ORG = 'hl7ch';
 
+  // ─── Fallback signals from upstream package-registry.json ──────────
+  // The registry's `ci-build` field looks like
+  //   http(s)://build.fhir.org/ig/{github-org}/{repo}
+  // The {github-org} segment is a reasonable proxy for who owns the IG,
+  // used as a fallback when no OVERRIDES.organization is set.
+  //
+  // NOTE: `ahdis` is intentionally NOT mapped — it is a multi-tenant
+  // publisher that builds IGs owned by various orgs (e.g. CH ELM is
+  // FOPH-owned but built under ahdis/ch-elm). ahdis-built IGs MUST
+  // declare their owner via OVERRIDES.organization.
+  var CI_BUILD_ORG = {
+    'hl7ch':         'hl7ch',
+    'ehealthsuisse': 'ehealth-suisse',
+    'umzhconnect':   'umzh',
+    'cara-ch':       'cara',
+    'bag-epl':       'foph'
+  };
+
+  // Per-org fallback workgroup. Applied only when an IG has no
+  // OVERRIDES.workgroup. Orgs with multiple workgroups (HL7 CH spans
+  // Arbeitsgruppe FHIR, JV EPD, JV Radiologie, JV Labor…) intentionally
+  // have no default — per-IG curation is the right tool there.
+  var ORG_DEFAULT_WG = {
+    'ehealth-suisse': { name: 'eHealth Suisse', url: 'mailto:martin.smock@e-health-suisse.ch' },
+    'swissnoso':      { name: 'Swissnoso',      url: 'mailto:contact@swissnoso.ch' },
+    'openmedical':    { name: 'Open Medical',   url: 'https://www.openmedical.swiss/#contact' }
+  };
+
+  function deriveOrgFromCiBuild(ciBuild) {
+    if (!ciBuild) return null;
+    var m = /build\.fhir\.org\/ig\/([^\/]+)\//i.exec(ciBuild);
+    if (!m) return null;
+    return CI_BUILD_ORG[m[1].toLowerCase()] || null;
+  }
+
   // ──────────────────────────── Extra IGs ────────────────────────────
   // IGs not present in the upstream HL7-CH package-registry but that should
   // still appear in the catalog. Hand-curated; add new entries here.
   var EXTRA_IGS = [{
-    id: 'https://fhir.ch/igs/ch-umzh-connect',
-    identifier: 'ch.fhir.ig.ch-umzh-connect',
-    name: 'CH UMZH Connect',
-    description: 'FHIR Implementation Guide for the University Medicine Zurich (UMZH) focusing on referral processes.',
-    version: '1.0.0-ballot',
-    fhirVersion: ['4.0.1'],
-    date: '2026-06-12',
-    publicationStatus: 'under-ballot',
-    ballotType: 'dstu',
-    organization: { id: 'umzh', name: 'Universitätsmedizin Zürich' },
-    url: 'http://fhir.ch/ig/ch-umzh-connect/1.0.0-ballot/',
-    codeRepository: 'https://github.com/umzhconnect/umzhconnect-ig',
-    links: {
-      ig: 'http://fhir.ch/ig/ch-umzh-connect/1.0.0-ballot/',
-      ciBuild: 'https://build.fhir.org/ig/umzhconnect/umzhconnect-ig/',
-      history: 'http://fhir.ch/ig/ch-umzh-connect/history.html',
-      source: 'https://github.com/umzhconnect/umzhconnect-ig',
-      wiki: 'https://github.com/umzhconnect/umzhconnect-ig/wiki'
-    }
-  }, {
     id: 'https://fhir.ch/igs/swissnoso',
     identifier: 'ch.fhir.ig.swissnoso',
     name: 'Swissnoso Implementation Guide',
@@ -287,11 +312,13 @@
   //   plist          — upstream per-IG package-list.json (for introduction etc.)
   //   versionEntry   — the specific version object from plist.list (or pkg.latest
   //                    as a fallback); supplies version/date/path/fhirversion/status/sequence
-  //   status         — final publicationStatus to assign ('published'|'under-ballot'|'superseded')
+  //   status         — final publicationStatus to assign ('published'|'under-ballot')
   function buildOne(pkg, plist, versionEntry, status) {
     var pkgId = pkg['package-id'];
     var over = OVERRIDES[pkgId] || {};
-    var orgId = over.organization || DEFAULT_ORG;
+    var orgId = over.organization
+      || deriveOrgFromCiBuild(pkg['ci-build'])
+      || DEFAULT_ORG;
     var description = over.description
       || (plist && plist.introduction)
       || pkg.title || '';
@@ -329,10 +356,11 @@
       links: links
     };
     if (over.workgroup) ig.workgroup = over.workgroup;
-    if (status === 'superseded' && over.supersededBy) ig.supersededBy = over.supersededBy;
+    else if (ORG_DEFAULT_WG[orgId]) ig.workgroup = ORG_DEFAULT_WG[orgId];
     if (status === 'under-ballot') {
       ig.ballotType = over.ballotType || deriveBallotType(versionEntry || {});
       if (over.ballotCloses) ig.ballotCloses = over.ballotCloses;
+      if (BALLOT_VOTE_FORMS[pkgId]) ig.voteForm = voteFormUrl(BALLOT_VOTE_FORMS[pkgId]);
     }
     return ig;
   }
@@ -356,12 +384,9 @@
       sequence: ''
     };
 
-    // Override short-circuits — preserve current behavior for these IGs.
-    if (over.publicationStatus === 'superseded') {
-      return [buildOne(pkg, plist, latestAsEntry, 'superseded')];
-    }
+    // Override short-circuit — ch-epr-fhir: upstream marks 5.0.0 as
+    // status='ballot' but it's released. Treat as published.
     if (over.publicationStatus === 'published') {
-      // ch-epr-fhir: upstream marks 5.0.0 as status='ballot' but it's released.
       return [buildOne(pkg, plist, latestAsEntry, 'published')];
     }
 
@@ -401,6 +426,22 @@
       bal = null;
     }
 
+    // STU/DSTU inference: when upstream doesn't set `sequence` (registry-
+    // level ballot fallback, or per-IG list with the field omitted), IGs
+    // whose first release was 0.x.x are almost always informative (DSTU
+    // by convention). Fall back to `latest.version` when plist is empty.
+    if (bal && !bal.sequence) {
+      var firstV = '';
+      for (var fi = list.length - 1; fi >= 0; fi--) {
+        var fv = list[fi];
+        if (!fv.version || fv.version === 'current' || fv.status === 'ci-build') continue;
+        firstV = fv.version;
+        break;
+      }
+      if (!firstV) firstV = latest.version;
+      if (/^0\./.test(firstV)) bal.sequence = 'DSTU';
+    }
+
     if (!pub && !bal) {
       // No usable plist — fall back to pkg.latest.
       return [buildOne(pkg, plist, latestAsEntry, derivePublicationStatus(latest.version, {}))];
@@ -416,6 +457,14 @@
       var packages = (registry.packages || []).filter(function (pkg) {
         return !BLACKLIST.has(pkg['package-id']);
       });
+      // Surface IGs upstream lists but we haven't curated yet — devtools
+      // diagnostic only. Defaults still render; curator sees the gap.
+      var uncurated = packages
+        .filter(function (p) { return !OVERRIDES[p['package-id']]; })
+        .map(function (p) { return p['package-id']; });
+      if (uncurated.length) {
+        console.warn('[load-data] Upstream IGs without an OVERRIDES entry — defaults applied:', uncurated);
+      }
       // Fetch every per-IG package-list.json in parallel.
       var listPromises = packages.map(function (pkg) {
         var path = pkg.path || ('ig/' + pkg['package-id'].split('.').pop() + '/package-list.json');

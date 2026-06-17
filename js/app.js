@@ -60,7 +60,6 @@
           description:  ig.description,
           organization: ig.organization,
           workgroup:    ig.workgroup,
-          supersededBy: ig.supersededBy,
           links:        ig.links,     // shared per-repo links
           versions:     []
         };
@@ -73,17 +72,17 @@
         fhirVersion:       ig.fhirVersion,
         ballotType:        ig.ballotType,
         ballotCloses:      ig.ballotCloses,
+        voteForm:          ig.voteForm,
         igUrl:             (ig.links && ig.links.ig) || ig.url
       });
     }
-    // Latest sits on top: ballot row first, then released, then superseded.
-    const subOrder = { 'under-ballot': 0, published: 1, superseded: 2 };
+    // Latest sits on top: ballot row first, then released.
+    const subOrder = { 'under-ballot': 0, published: 1 };
     for (const agg of byId.values()) {
       agg.versions.sort((a, b) =>
         (subOrder[a.publicationStatus] ?? 9) - (subOrder[b.publicationStatus] ?? 9));
-      agg.maxDate     = agg.versions.reduce((m, v) => (v.date > m ? v.date : m), '');
-      agg.isSuperseded = agg.versions.every(v => v.publicationStatus === 'superseded');
-      agg.hasBallot   = agg.versions.some(v => v.publicationStatus === 'under-ballot');
+      agg.maxDate   = agg.versions.reduce((m, v) => (v.date > m ? v.date : m), '');
+      agg.hasBallot = agg.versions.some(v => v.publicationStatus === 'under-ballot');
     }
     return [...byId.values()];
   }
@@ -106,9 +105,7 @@
   //   0 = pinned (CH Term, CH Core)
   //   1 = IGs with an active ballot
   //   2 = the rest
-  //   3 = superseded (sunk to the bottom)
   function tier(agg) {
-    if (agg.isSuperseded) return 3;
     if (PINNED_IDS.includes(agg.identifier)) return 0;
     if (agg.hasBallot) return 1;
     return 2;
@@ -119,11 +116,10 @@
     const all = window.FHIR_CH_IGS || [];
 
     // Hero stats are per-entry (per version).
-    const published  = all.filter(g => g.publicationStatus === 'published');
-    const ballot     = all.filter(g => g.publicationStatus === 'under-ballot');
-    const superseded = all.filter(g => g.publicationStatus === 'superseded');
-    const stu        = ballot.filter(g => g.ballotType === 'stu');
-    const dstu       = ballot.filter(g => g.ballotType === 'dstu');
+    const published = all.filter(g => g.publicationStatus === 'published');
+    const ballot    = all.filter(g => g.publicationStatus === 'under-ballot');
+    const stu       = ballot.filter(g => g.ballotType === 'stu');
+    const dstu      = ballot.filter(g => g.ballotType === 'dstu');
 
     const isBallotView = state.view === 'ballot';
     const isAllView    = state.view === 'all';
@@ -165,12 +161,17 @@
     const groups = [...byOrg.values()]
       .map(g => {
         // Each org's rank is the date of its newest IG (across all
-        // aggregates / all versions). Most recent publisher leads.
+        // aggregates / all versions). HL7 Switzerland is pinned first;
+        // the rest sort by most recent publisher.
         g.maxDate = g.items.reduce(
           (m, agg) => (agg.maxDate > m ? agg.maxDate : m), '');
         return g;
       })
-      .sort((a, b) => (b.maxDate || '').localeCompare(a.maxDate || ''))
+      .sort((a, b) => {
+        if (a.id === 'hl7ch') return -1;
+        if (b.id === 'hl7ch') return 1;
+        return (b.maxDate || '').localeCompare(a.maxDate || '');
+      })
       .map(g => {
         g.items.sort((a, b) => {
           const ta = tier(a), tb = tier(b);
@@ -186,7 +187,7 @@
       });
 
     return {
-      all, published, ballot, stu, dstu, superseded,
+      all, published, ballot, stu, dstu,
       groups,
       isBallotView,
       isAllView,
@@ -196,10 +197,9 @@
 
   // ─── Chip + badge factories ─────────────────────────────────────
   function badgeForVersion(v) {
-    if (v.publicationStatus === 'superseded')  return { cls: 'badge superseded', text: 'SUPERSEDED' };
-    if (v.publicationStatus === 'published')   return { cls: 'badge published',  text: 'PUBLISHED' };
-    if (v.ballotType === 'stu')                return { cls: 'badge stu',        text: 'STU BALLOT' };
-    return                                            { cls: 'badge dstu',       text: 'DSTU BALLOT' };
+    if (v.publicationStatus === 'published') return { cls: 'badge published', text: 'PUBLISHED' };
+    if (v.ballotType === 'stu')              return { cls: 'badge stu',       text: 'STU BALLOT' };
+    return                                          { cls: 'badge dstu',      text: 'DSTU BALLOT' };
   }
 
   function versionChip(v) {
@@ -231,7 +231,15 @@
 
   function renderVersionRow(v) {
     const badge = badgeForVersion(v);
-    const chip = renderChip(versionChip(v));
+    const chips = [renderChip(versionChip(v))];
+    if (v.voteForm) {
+      chips.push(renderChip({
+        cls:   'chip primary',
+        icon:  '✓',
+        label: 'VOTE',
+        url:   v.voteForm
+      }));
+    }
     const fhirStr = (v.fhirVersion || []).join(', ') || '—';
     const cls = (v.publicationStatus || '').replace(/[^a-z-]/g, '');
     return `<div class="version-row ${cls}">
@@ -239,17 +247,13 @@
       <span class="vno">v${escapeHtml(v.version || '—')}</span>
       <span class="fhir">${escapeHtml(fhirStr)}</span>
       <span class="date">${fmtDate(v.date)}</span>
-      <span class="version-chip">${chip}</span>
+      <span class="version-chip">${chips.join('')}</span>
     </div>`;
   }
 
   function renderIgCard(agg, view, ballotKind) {
     const versions = visibleVersions(agg, view, ballotKind);
     if (!versions.length) return '';
-
-    const supersededNote = agg.isSuperseded && agg.supersededBy
-      ? `<div class="superseded-note">Superseded by <a href="${escapeHtml(agg.supersededBy.url)}" target="_blank" rel="noopener">${escapeHtml(agg.supersededBy.name)}</a>.</div>`
-      : '';
 
     const workgroupMeta = agg.workgroup
       ? `<div class="meta">
@@ -261,14 +265,13 @@
 
     const sharedChipsHtml = sharedChips(agg.links).map(renderChip).join('');
 
-    return `<div class="ig-card${agg.isSuperseded ? ' is-superseded' : ''}">
+    return `<div class="ig-card">
       <div class="ig-shared">
         <div class="title-row">
           <span class="title">${escapeHtml(agg.name)}</span>
           <span class="pkg-id">${escapeHtml(agg.identifier)}</span>
         </div>
         <div class="description">${escapeHtml(agg.description)}</div>
-        ${supersededNote}
         ${workgroupMeta}
       </div>
       <div class="versions">
