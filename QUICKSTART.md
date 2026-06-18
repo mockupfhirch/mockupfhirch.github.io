@@ -2,6 +2,8 @@
 
 The fast path for maintaining the fhir.ch IG catalog. If you just need to start a ballot cycle, hide an IG, or add a workgroup attribution, you're in the right place. For the full data contracts and every curation knob, see [README.md](README.md).
 
+> **Using Claude Code?** Type the action you want — `/ballot-open`, `/ballot-close`, `/ig-curate`, `/ig-hide`, `/ig-add-extra`, `/site-preview`, `/deploy`. The skills under [`.claude/skills/`](.claude/skills/) walk you through each task with the exact file paths and paste templates.
+
 ## 1. The pipeline in 60 seconds
 
 ```
