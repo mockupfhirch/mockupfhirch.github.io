@@ -22,7 +22,8 @@
     'ch.fhir.ig.ch-ig',           // empty example/template IG, not for the public registry
     'ch.fhir.ig.ch-atc',          // superseded by CH EPR FHIR — hidden per HL7 CH (Oliver, 2026-06-16)
     'ch.fhir.ig.ch-epr-ppqm',     // superseded by CH EPR FHIR — hidden per HL7 CH (Oliver, 2026-06-16)
-    'ch.fhir.ig.ch-epr-mhealth'   // superseded by CH EPR FHIR — hidden per HL7 CH (Oliver, 2026-06-16)
+    'ch.fhir.ig.ch-epr-mhealth',  // superseded by CH EPR FHIR — hidden per HL7 CH (Oliver, 2026-06-16)
+    'ch.fhir.ig.ch-epr-term'      // superseded by CH Term — hidden per HL7 CH (2026-06-18)
   ]);
 
   // ─────────────────── Current ballot cycle ───────────────────
@@ -155,40 +156,44 @@
       description: 'Implementation Guide that specifies the exchange format for cancer registration. In order to achieve data completeness on a national level, institutions involved in diagnosing or treating cancer are required to report cases of cancer to a cancer registry.'
     },
 
-    // ─── eHealth Suisse ──────────────────────────────────────────────
-    'ch.fhir.ig.ch-epr-fhir': {
-      organization: 'ehealth-suisse',
-      description: 'This national extension provides a FHIR based API for the Swiss EPR by extending the IHE FHIR based mobile profiles.',
-      workgroup: { name: 'eHealth Suisse', url: 'mailto:martin.smock@e-health-suisse.ch' },
-      // Upstream package-list.json marks 5.0.0 as status="ballot" but this is
-      // the released national extension. Treat as published.
-      publicationStatus: 'published'
-    },
+    // ─── HL7 Switzerland — STU Ballot ────────────────────────────────
     'ch.fhir.ig.ch-emr': {
-      organization: 'ehealth-suisse'
+      // STU Ballot under HL7.ch (was previously attributed to eHealth Suisse).
+      organization: 'hl7ch'
     },
 
-    // ─── CARA ────────────────────────────────────────────────────────
-    'ch.fhir.ig.ch-emed-epr': {
-      organization: 'cara',
-      description: 'FHIR eMedication exchange formats for the implementation effort of CARA within its EPR community.'
+    // ─── HL7 Switzerland — joint Informative Ballots ─────────────────
+    // Run as Informative Ballot under HL7.ch alongside their publisher,
+    // so each renders under its own "HL7 Switzerland / X" section header.
+    'ch.fhir.ig.ch-alis-connect': {
+      organization: 'hl7ch-alis'
     },
-
-    // ─── Refdata Foundation (for Swissmedic) ─────────────────────────
-    'ch.fhir.ig.ch-idmp': {
-      organization: 'refdata',
-      description: 'IDMP base Implementation Guide published by Refdata Foundation for Swissmedic.'
-    },
-
-    // ─── Universitätsmedizin Zürich ──────────────────────────────────
     'ch.fhir.ig.ch-umzh-connect': {
-      organization: 'umzh',
+      organization: 'hl7ch-umzh',
       description: 'FHIR Implementation Guide for the University Medicine Zurich (UMZH) focusing on referral processes.',
       ballotType: 'dstu',
       links: {
         source: 'https://github.com/umzhconnect/umzhconnect-ig',
         wiki: 'https://github.com/umzhconnect/umzhconnect-ig/wiki'
       }
+    },
+    'ch.fhir.ig.ch-idmp': {
+      organization: 'hl7ch-refdata',
+      description: 'IDMP base Implementation Guide published by Refdata Foundation for Swissmedic.'
+    },
+    'ch.fhir.ig.ch-epr-fhir': {
+      organization: 'hl7ch-ehealth-suisse',
+      description: 'This national extension provides a FHIR based API for the Swiss EPR by extending the IHE FHIR based mobile profiles.',
+      workgroup: { name: 'eHealth Suisse', url: 'mailto:martin.smock@e-health-suisse.ch' },
+      // Upstream package-list.json marks 5.0.0 as status="ballot" but this is
+      // the released national extension. Treat as published.
+      publicationStatus: 'published'
+    },
+
+    // ─── CARA ────────────────────────────────────────────────────────
+    'ch.fhir.ig.ch-emed-epr': {
+      organization: 'cara',
+      description: 'FHIR eMedication exchange formats for the implementation effort of CARA within its EPR community.'
     }
     // Example with ballot info:
     // 'ch.fhir.ig.ch-core': { ballotCloses: '2026-07-15', ballotType: 'stu' }
@@ -198,16 +203,20 @@
   // Order matches the bundled renderer's expected sort order. Anything not
   // in this map renders under its bare id.
   var ORG_NAMES = {
-    'hl7ch': 'HL7 Switzerland',
-    'ehealth-suisse': 'eHealth Suisse',
-    'foph': 'Federal Office of Public Health',
-    'ech-hl7ch': 'eCH / HL7 Switzerland',
-    'sphn': 'Swiss Personalized Health Network',
-    'cara': 'CARA',
-    'swissnoso': 'Swissnoso',
-    'openmedical': 'Open Medical',
-    'umzh': 'Universitätsmedizin Zürich',
-    'refdata': 'Refdata Foundation'
+    'hl7ch':                'HL7 Switzerland',
+    'hl7ch-alis':           'HL7 Switzerland / ALIS Connect',
+    'hl7ch-umzh':           'HL7 Switzerland / UMZH Connect',
+    'hl7ch-refdata':        'HL7 Switzerland / Refdata Foundation',
+    'hl7ch-ehealth-suisse': 'HL7 Switzerland / eHealth Suisse',
+    'ehealth-suisse':       'eHealth Suisse',
+    'foph':                 'Federal Office of Public Health',
+    'ech-hl7ch':            'eCH / HL7 Switzerland',
+    'sphn':                 'Swiss Personalized Health Network',
+    'cara':                 'CARA',
+    'swissnoso':            'Swissnoso',
+    'openmedical':          'Open Medical',
+    'umzh':                 'Universitätsmedizin Zürich',
+    'refdata':              'Refdata Foundation'
   };
   var ORG_ORDER = Object.keys(ORG_NAMES);
 
