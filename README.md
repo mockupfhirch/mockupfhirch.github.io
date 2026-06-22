@@ -81,7 +81,11 @@ The loader is the single source of curated overlay on top of the upstream JSON:
   - `links` — `{source, wiki, jira}`; override the default `github.com/hl7ch/{slug}` derivation.
   - `publicationStatus: 'published'` — force-promote an upstream entry tagged `ballot` to published (currently used only by `ch-epr-fhir`).
 - **`EXTRA_IGS`** — array of fully-specified IG entries appended to the catalog. Use this only for IGs upstream does not yet list (currently Swissnoso and MedNet Interface). Copy an existing entry as the template — every field shown there is required.
-- **`BALLOT_CYCLE`** — single object that owns the current ballot cycle: the year, the registration form Drive id, and the per-IG form Drive ids. Drives both the green **VOTE** chip on each open ballot row and the blue **Register to vote · Ballot YYYY →** hero button. Set to `null` between cycles. See [Updating the ballot vote forms](#updating-the-ballot-vote-forms) for the per-cycle procedure.
+- **`BALLOT_CYCLE`** — single object that owns the current ballot cycle: the year, the registration form Drive id, and the per-IG form Drive ids. Drives both the green **VOTE** chip on each open ballot row and the blue **Register to vote · Ballot YYYY →** hero button. Set to `null` between cycles. Two optional ISO-date fields auto-shut-off pieces of the UI when their deadline passes (both INCLUSIVE — UI hides starting the day after):
+  - **`registrationCloses`** — hides the hero Register button once past.
+  - **`votingCloses`** — empties `forms` (every VOTE chip disappears) once past.
+
+  See [Updating the ballot vote forms](#updating-the-ballot-vote-forms) for the per-cycle procedure.
 - **`ORG_NAMES`** and **`ORG_ORDER`** — display name per organization `id`. The `id` keys are what `OVERRIDES.organization` references. IGs with no `organization` override and no fallback signal default to `'hl7ch'`.
 - **`WG_*` shorthands** — reusable workgroup objects. Add new ones rather than inlining `{name, url}` literals.
 

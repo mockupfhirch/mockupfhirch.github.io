@@ -76,6 +76,22 @@ An internet connection is required — the catalog data is fetched at load time,
 
 Set `BALLOT_CYCLE = null` in `js/load-data.js`. That's it — the hero Register button hides, "Join FHIR.ch work group calls" goes back to primary, and every per-IG VOTE chip disappears. No other edits needed.
 
+#### Auto-shutoff by date (optional)
+
+Two ISO-date fields on `BALLOT_CYCLE` let registration and voting expire on their own — useful when registration closes weeks before voting:
+
+```js
+var BALLOT_CYCLE = {
+  year:                '2026',
+  registrationCloses:  '2026-08-03',   // hero Register button hides 2026-08-04
+  votingCloses:        '2026-09-30',   // all VOTE chips hide 2026-10-01
+  registrationFormId:  '…',
+  forms: { … }
+};
+```
+
+Both fields are INCLUSIVE (the day named is still active; the UI piece hides starting the day after) and use the browser's local date. Either is optional — omit one to keep that piece live until you flip `BALLOT_CYCLE = null` by hand. The forms themselves should still be closed in Google Drive ("Accepting responses" off) as the authoritative kill switch; these dates only handle the UI.
+
 > **Dev-mode sanity check.** When you're running on `localhost` / `127.0.0.1` / `file://`, the page prints `[ballot-cycle]` warnings to the browser console for any drift between `BALLOT_CYCLE` and the catalog data: `BALLOT_CYCLE` is `null` while IGs are still under-ballot, an under-ballot IG has no form entry, a `BALLOT_CYCLE.forms` key is stale / a typo / references a now-published IG, or `BALLOT_CYCLE.year` doesn't match any IG's `ballotCloses` year. Open devtools after any edit and you'll see what to fix. Production hostnames stay silent.
 
 ### Curate an IG (workgroup, organization, description, ballot dates)

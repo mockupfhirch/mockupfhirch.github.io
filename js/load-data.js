@@ -35,6 +35,10 @@
   // both vanish, no other edits required. See QUICKSTART.md.
   var BALLOT_CYCLE = {
     year:                '2026',
+    // Auto-shutoff dates (browser-local date, ISO YYYY-MM-DD, INCLUSIVE — UI
+    // hides starting the day AFTER). Source: HL7.ch 2026 ballot calendar.
+    registrationCloses:  '2026-08-03',   // End of registration → hero Register button hides 2026-08-04
+    votingCloses:        '2026-09-30',   // End of voting → every per-IG VOTE chip hides 2026-10-01
     registrationFormId:  '13zN8gpFz_XjTDf3MZHo8E0SL9xjj8TJQ8AxcZQONOwY',
     forms: {
       'ch.fhir.ig.ch-alis-connect': '1Ge_9fwM_yd3ZaLBwumlQuMzlz1AaZi1RAAeMw6RlDds',
@@ -47,6 +51,22 @@
     }
   };
   // var BALLOT_CYCLE = null;   // ← uncomment when the cycle closes
+
+  // Auto-disable past-deadline pieces. Each *Closes day is INCLUSIVE — the UI
+  // hides starting the day AFTER. Browser-local date (Swiss time for most
+  // visitors). Leave a *Closes field unset to keep that piece enabled manually.
+  if (BALLOT_CYCLE) {
+    var _today = (function () {
+      var d = new Date(), m = d.getMonth() + 1, day = d.getDate();
+      return d.getFullYear() + '-' + (m < 10 ? '0' : '') + m + '-' + (day < 10 ? '0' : '') + day;
+    })();
+    if (BALLOT_CYCLE.registrationCloses && _today > BALLOT_CYCLE.registrationCloses) {
+      BALLOT_CYCLE.registrationFormId = null;
+    }
+    if (BALLOT_CYCLE.votingCloses && _today > BALLOT_CYCLE.votingCloses) {
+      BALLOT_CYCLE.forms = {};
+    }
+  }
 
   var BALLOT_VOTE_FORMS = (BALLOT_CYCLE && BALLOT_CYCLE.forms) || {};
   function voteFormUrl(id) { return 'https://docs.google.com/forms/d/' + id + '/viewform'; }
